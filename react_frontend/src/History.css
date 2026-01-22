@@ -1,0 +1,233 @@
+/* History.css */
+.history-container {
+    padding: 6rem 2rem;
+    /* Even more top padding for global navbar clearance */
+    max-width: 1200px;
+    margin: 0 auto;
+    min-height: 80vh;
+}
+
+.history-header {
+    text-align: center;
+    margin-bottom: 3rem;
+    animation: fadeInDown 0.8s ease-out;
+    position: relative;
+    z-index: 10;
+}
+
+.history-header h1 {
+    font-size: 2.5rem;
+    color: #333;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.history-header p {
+    color: #666;
+    font-size: 1.1rem;
+}
+
+.history-search-container {
+    max-width: 600px;
+    margin: 0 auto 3rem auto;
+    display: flex;
+    justify-content: center;
+}
+
+.history-search-bar {
+    width: 100%;
+    padding: 0.8rem 1.5rem;
+    border-radius: 30px;
+    border: 2px solid #eee;
+    font-size: 1rem;
+    outline: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+.history-search-bar:focus {
+    border-color: #764ba2;
+    box-shadow: 0 6px 15px rgba(118, 75, 162, 0.15);
+}
+
+.recipe-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+    animation: fadeInUp 0.8s ease-out;
+    justify-content: flex-start;
+}
+
+.recipe-history-card {
+    background: white;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #eee;
+    flex: 0 1 calc((100% - 4rem) / 3);
+    /* 3 items per row on desktop */
+    min-width: 300px;
+}
+
+@media (max-width: 1024px) {
+    .recipe-history-card {
+        flex: 0 1 calc((100% - 2rem) / 2);
+        /* 2 items per row on tablets/small laptops */
+    }
+}
+
+@media (max-width: 768px) {
+    .recipe-history-card {
+        flex: 0 1 100%;
+        /* 1 item per row on mobile */
+    }
+}
+
+.recipe-history-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
+}
+
+.recipe-card-content {
+    padding: 1.5rem;
+    flex-grow: 1;
+    cursor: pointer;
+}
+
+.recipe-card-content h3 {
+    margin: 0 0 1rem 0;
+    color: #222;
+    font-size: 1.3rem;
+}
+
+.recipe-card-content p {
+    margin: 0.5rem 0;
+    color: #555;
+    font-size: 0.95rem;
+}
+
+.recipe-card-actions {
+    padding: 1.2rem;
+    background: #f9f9f9;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.resume-btn,
+.remove-btn {
+    padding: 0.6rem 1.2rem;
+    border-radius: 25px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+    font-size: 0.9rem;
+}
+
+.resume-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
+    flex: 1.5;
+}
+
+.download-btn {
+    background: #f1f3f5;
+    color: #495057;
+    border: 1.5px solid #dee2e6;
+    padding: 0.6rem 1rem;
+    border-radius: 25px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.remove-btn {
+    background: #fff;
+    color: #fa5252;
+    border: 1.5px solid #ffa8a8;
+    flex: 1;
+}
+
+.resume-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(118, 75, 162, 0.4);
+}
+
+.download-btn:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.remove-btn:hover {
+    background: #fff5f5;
+    border-color: #fa5252;
+}
+
+.loading-state,
+.error-message,
+.no-recipes {
+    text-align: center;
+    padding: 4rem;
+    font-size: 1.2rem;
+    color: #666;
+}
+
+.error-message {
+    color: #e53935;
+    background: #ffebee;
+    border-radius: 10px;
+    margin-bottom: 2rem;
+}
+
+.no-recipes button {
+    margin-top: 1rem;
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 768px) {
+    .history-container {
+        padding: 5rem 1rem;
+        /* High top padding for mobile navbar clearance */
+    }
+
+    .history-header h1 {
+        font-size: 1.8rem;
+    }
+}

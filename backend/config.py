@@ -1,0 +1,2 @@
+# MONGO_URI = "mongodb://localhost:27017"
+JWT_SECRET = "YOUR_SECRET_KEY_CHANGE_THIS"

@@ -1,0 +1,106 @@
+.footer {
+    background: #f5f5f5;
+    color: #333;
+    padding: 40px 0 20px;
+    width: 100%;
+    position: relative;
+    border-top: 1px solid #ddd;
+}
+
+.footer-container {
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 25px;
+    padding: 0 20px;
+    /* Reduced from 5% for tighter control */
+    max-width: 100%;
+    /* Ensure it doesn't shrink unnecessarily */
+}
+
+.footer-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.footer-logo {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    gap: 10px;
+}
+
+.footer-logo-img {
+    height: 35px;
+    width: auto;
+}
+
+.footer-logo-text {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #333;
+}
+
+.footer-tagline {
+    color: #777;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    max-width: 400px;
+    text-align: center;
+}
+
+.footer-links {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 30px;
+}
+
+.footer-links a {
+    color: #666;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.footer-links a:hover {
+    color: #4c6fff;
+}
+
+.footer-bottom {
+    width: 100%;
+    margin: 20px 0 0;
+    padding: 15px 20px 0;
+    border-top: 1px solid #ddd;
+    text-align: center;
+    color: #888;
+    font-size: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.footer-signature {
+    color: #4c6fff;
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-top: 5px;
+}
+
+@media (max-width: 768px) {
+    .footer-links {
+        gap: 15px;
+    }
+
+    .footer-tagline {
+        font-size: 0.8rem;
+    }
+}

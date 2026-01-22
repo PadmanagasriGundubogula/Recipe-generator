@@ -1,0 +1,11 @@
+<sent_id=ec07a>
+#डाल-o तेल ताजा बहुत   चम्मच
+dAla_1-o_1	1	-	-	0:main	-	-	-	-
+wela_1	2	-	-	1:k2p	-	-	-	-
+wAjA	3	-	-	2:mod	-	-	-	-
+bahuwa	4	-	-	3:intf	-	-	-	-
+[meas_1]	5	-	-	-	-	-	-	-
+2	6	-	-	-	-	-	-	5:count
+cammaca_1	7	-	-	-	-	-	-	5:unit
+%imperative								
+</sent_id>

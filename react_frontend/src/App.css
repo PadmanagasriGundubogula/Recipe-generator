@@ -1,0 +1,11 @@
+.content-area {
+  padding-top: 90px;
+  /* Exact match for Navbar height */
+  min-height: calc(100vh - 90px);
+  padding-bottom: 40px;
+}
+
+.app-main-container {
+  width: 100%;
+  overflow-x: hidden;
+}

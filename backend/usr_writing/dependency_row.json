@@ -1,0 +1,108 @@
+{
+  "relations": [
+    {
+      "relation": "What (subject) - क्या-कर्ता",
+      "dependency_relation": "k1"
+    },
+    {
+      "relation": "What (object) - क्या-कर्म",
+      "dependency_relation": "k2"
+    },
+    {
+      "relation": "Who (subject) - कौन-कर्ता",
+      "dependency_relation": "k1"
+    },
+    {
+      "relation": "Who (object) - कौन-कर्म",
+      "dependency_relation": "k2"
+    },
+    {
+      "relation": "When - कब",
+      "dependency_relation": "k7t"
+    },
+    {
+      "relation": "Where - कहां",
+      "dependency_relation": "k7p"
+    },
+    {
+      "relation": "How - कैसे",
+      "dependency_relation": "krvn"
+    },
+    {
+      "relation": "How long - कब तक",
+      "dependency_relation": "k7t"
+    },
+    {
+      "relation": "Where exactly - कहां पर",
+      "dependency_relation": "k7p"
+    },
+    {
+      "relation": "From where - कहां से",
+      "dependency_relation": "k5"
+    },
+    {
+      "relation": "To where - कहां तक",
+      "dependency_relation": "k2p"
+    },
+    {
+      "relation": "Why (purpose) - किस लिए",
+      "dependency_relation": "rt"
+    },
+    {
+      "relation": "In - किस में",
+      "dependency_relation": "k7p"
+    },
+    {
+      "relation": "Why (reason) - किस के कारण",
+      "dependency_relation": "rh"
+    },
+    {
+      "relation": "Like what - किस के समान",
+      "dependency_relation": "ru"
+    },
+    {
+      "relation": "With what - किस के साथ",
+      "dependency_relation": "k3"
+    },
+    {
+      "relation": "Compared to what - किसके तुलना में",
+      "dependency_relation": "rv"
+    },
+    {
+      "relation": "Modifier - विशेषण/क्रिया विशेषण",
+      "dependency_relation": "mod"
+    },
+    {
+      "relation": "Quantity - मात्रा",
+      "dependency_relation": "quant"
+    },
+    {
+      "relation": "When(time)-कितनी देर तक- अधिकरण/काल",
+      "dependency_relation": "k7t"
+    },
+    {
+      "relation": "When(time)-कितने देर में- अधिकरण/काल",
+      "dependency_relation": "k7t"
+    },
+    {
+      "relation": "When(time)-कब तक- अधिकरण/काल",
+      "dependency_relation": "k7t"
+    },
+    {
+      "relation": "When(time)-कितनी समय तक- अधिकरण/काल",
+      "dependency_relation": "k7t"
+    },
+    {
+      "relation": "for golden - सुनहरे होने तक",
+      "dependency_relation": "k7t"
+    },
+    {
+      "relation": "for cooked - पकने तक",
+      "dependency_relation": "k7t"
+    },
+    {
+      "relation": "for running - चलने तक",
+      "dependency_relation": "k7t"
+    }
+  ]
+}

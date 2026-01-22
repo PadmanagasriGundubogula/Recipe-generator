@@ -1,0 +1,28 @@
+/* Page background */
+.builder-page {
+  font-family: "Inter", sans-serif;
+  background: linear-gradient(135deg, #f2f7f5, #dbe7d8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  min-height: 100vh;
+}
+
+/* Use .builder-card instead of plain .card if you want to avoid Bootstrap conflict */
+.builder-card {
+  background: #ffffff;
+  padding: 30px;
+  border-radius: 24px;
+  max-width: 900px;
+  width: 100%;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  text-align: center;
+}
+
+/* ...then copy the rest of your CSS exactly as is, keeping your classes:
+   .component-sections, .component-section, .ingredient-item, .action-item, 
+   .drop-zone, .generated-step, .toast-notification, .relations-section, etc.
+
+   You can literally paste your style block under these two rules.
+*/
