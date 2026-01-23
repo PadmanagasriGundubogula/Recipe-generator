@@ -115,8 +115,8 @@ def ensure_initial_data():
             {"type": "other", "name": "pan", "emoji": "🥘"},
             {"type": "other", "name": "grinder", "emoji": "⚙️"},
             {"type": "other", "name": "spoon", "emoji": "🥄"},
-            {"type": "other", "name": "flame", "emoji": "🔥"},
-            {"type": "other", "name": "heat", "emoji": "🔥"},
+            {"type": "ingredient", "name": "flame", "emoji": "🔥"},
+            {"type": "ingredient", "name": "heat", "emoji": "🔥"},
         ])
 
     if recipe_options.count_documents({}) == 0:

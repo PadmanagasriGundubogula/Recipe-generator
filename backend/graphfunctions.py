@@ -371,8 +371,9 @@ def create_graph_from_instruction(
                 desc_label = str(desc)
                 desc_rel = "mod"
 
-            modifier_node = f"modifier_verb_{desc_label}_{uuid.uuid4().hex[:6]}"
-            G.add_node(modifier_node, node_type="modifier", label=desc_label)
+            safe_desc = str(desc_label).strip().replace(" ", "-")
+            modifier_node = f"modifier_verb_{safe_desc}_{uuid.uuid4().hex[:6]}"
+            G.add_node(modifier_node, node_type="modifier", label=safe_desc)
 
             if desc_rel == "mod":
                 mod_node = f"mod_verb_{idx}_{uuid.uuid4().hex[:6]}"
@@ -456,8 +457,9 @@ def create_graph_from_instruction(
         G.add_node(mod_node, node_type="mod", label="mod")
         G.add_edge(noun_node, mod_node)
 
-        modifier_node = f"modifier_{modifier}_{uuid.uuid4().hex[:6]}"
-        G.add_node(modifier_node, node_type="modifier", label=modifier)
+        safe_modifier = str(modifier).strip().replace(" ", "-")
+        modifier_node = f"modifier_{safe_modifier}_{uuid.uuid4().hex[:6]}"
+        G.add_node(modifier_node, node_type="modifier", label=safe_modifier)
         G.add_edge(mod_node, modifier_node)
 
         if intensifier:
@@ -532,12 +534,20 @@ def create_graph_from_instruction(
                     counters
                 )
 
-            mod_node = add_modifier_nodes(
-                G,
-                noun_node,
-                noun_rel.get('modifier'),
-                noun_rel.get('intensifier')
-            )
+            # Handle modifiers and intensifiers
+            modifiers = noun_rel.get('nounModifiers', {}).get(noun, [])
+            intensifiers = noun_rel.get('nounIntensifiers', {}).get(noun, [])
+            
+            # Zip modifiers with intensifiers
+            mod_int_pairs = itertools.zip_longest(modifiers, intensifiers)
+            for modifier, intensifier in mod_int_pairs:
+                if modifier:
+                    add_modifier_nodes(G, noun_node, modifier, intensifier)
+
+            # Support legacy 'modifier' field if present
+            legacy_mod = noun_rel.get('modifier')
+            if legacy_mod and legacy_mod not in modifiers:
+                add_modifier_nodes(G, noun_node, legacy_mod, noun_rel.get('intensifier'))
 
             # Handle span relationship if present
             if noun_rel.get('complexType') == 'span':

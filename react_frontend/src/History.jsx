@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "./config";
 import "./History.css";
@@ -46,7 +46,7 @@ const History = () => {
 
     const t = TEXTS[appLanguage] || TEXTS.en;
 
-    const fetchRecipes = async () => {
+    const fetchRecipes = useCallback(async () => {
         try {
             const response = await fetch(`${API_URL}/get-user-recipes/${userId}`);
             const data = await response.json();
@@ -60,7 +60,7 @@ const History = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [userId, API_URL]);
 
     useEffect(() => {
         if (!userId) {
@@ -68,7 +68,7 @@ const History = () => {
             return;
         }
         fetchRecipes();
-    }, [userId, navigate, API_URL]);
+    }, [userId, navigate, API_URL, fetchRecipes]);
 
     const handleResume = (recipeId) => {
         localStorage.setItem("currentRecipeId", recipeId);
@@ -107,17 +107,22 @@ const History = () => {
             const sentencesResp = await fetch(`${API_URL}/get-sentences-with-id/${recipe.recipe_id}`);
             const sentencesData = await sentencesResp.json();
 
+            try {
+                // If there's a stored running text in the backend or local (this might need backend support if not stored)
+                // For now, we use the steps we have.
+            } catch (e) { }
+
             const ingredients = Array.isArray(recipeData.ingredients) ? recipeData.ingredients.join(", ") : "N/A";
             const steps = Array.isArray(sentencesData.instructions)
                 ? sentencesData.instructions.map((s, idx) => `${idx + 1}. ${s.text}`).join("\n")
                 : "No steps generated yet.";
 
-            const content = `RECIPE DETAILS\n` +
+            let content = `RECIPE DETAILS\n` +
                 `====================\n` +
                 `Name: ${recipe.recipe_name}\n` +
                 `Type: ${recipe.recipe_type}\n` +
-                `Cooking Time: ${recipeData.cooking_time || "N/A"} minutes\n` +
-                `Created At: ${new Date(recipe.created_at).toLocaleString()}\n\n` +
+                `duration to cook : ${recipeData.cooking_time || "N/A"}minutes\n` +
+                `Created At: ${new Date(recipe.created_at).toLocaleString()}\n` +
                 `INGREDIENTS:\n` +
                 `${ingredients}\n\n` +
                 `STEPS:\n` +

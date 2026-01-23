@@ -648,8 +648,6 @@
 #                 final_filtered_ids[0] = f"{verb_base}-0_sakA_1"
 #             elif tam == "o_1":
 #                 final_filtered_ids[0] = f"{verb_base}-o_1"
-#             elif tam == "o_2":
-#                 final_filtered_ids[0] = f"{verb_base}-o_2"
 #             elif tam == "e_1":
 #                 final_filtered_ids[0] = f"{verb_base}-e_1"
 #             else:
@@ -1272,29 +1270,53 @@ def graphtousr(input_graph, relations_file_path, recipe_id, db):
             # 8) modifier / intensifier / mod (structure)
             # -----------------------------------------
             if node_type == 'modifier':
-                # Check for "dry" and its connection to a noun
+                # Robust parent finding for modifiers
                 mod_display = info.get('display', '').lower()
-                if 'dry' in mod_display:
-                    # Find if it's connected to a noun
-                    mod_id = next(
-                        (node['id'] for node in data['nodes'] 
-                         if node['attributes']['label'] == info['display'] and node['attributes']['node_type'] == 'modifier'),
-                        None
-                    )
-                    if mod_id:
-                        source_edges = [edge for edge in data['edges'] if edge['target'] == mod_id]
-                        if source_edges:
-                            source_id = source_edges[0]['source']
-                            source_node = next(n for n in data['nodes'] if n['id'] == source_id)
-                            if source_node['attributes'].get('node_type') in ['noun', 'ingredient']:
-                                noun_label = source_node['attributes']['label']
-                                noun_idx = label_to_index_dep.get(noun_label.strip('[]'))
-                                if noun_idx:
-                                    dependencies.append(f"{noun_idx}:krvn")
-                                    print(f"Modifier node (dry): {internal_label} (Dependency: {dependencies[-1]})")
-                                    continue
+                mod_id = next(
+                    (node['id'] for node in data['nodes'] 
+                     if node['attributes']['label'] == info['display'] and node['attributes']['node_type'] == 'modifier'),
+                    None
+                )
+                
+                if mod_id:
+                    # Walk up to find the head (noun or verb)
+                    curr_node_id = mod_id
+                    parent_idx = verb_tam_index
+                    dep_rel = "mod"
+                    
+                    # Maximum walk of 3 steps (modifier -> mod/relation -> noun/verb)
+                    for _ in range(3):
+                        incoming_edges = [e for e in data['edges'] if e['target'] == curr_node_id]
+                        if not incoming_edges:
+                            break
+                        
+                        parent_id = incoming_edges[0]['source']
+                        parent_node = next((n for n in data['nodes'] if n['id'] == parent_id), None)
+                        if not parent_node:
+                            break
+                            
+                        p_type = parent_node['attributes'].get('node_type')
+                        p_label = parent_node['attributes'].get('label', '')
+                        
+                        if p_type in ['verb_tam', 'noun', 'ingredient']:
+                            parent_idx = label_to_index_dep.get(p_label.strip('[]'), verb_tam_index)
+                            break
+                        elif p_type == 'relation':
+                            dep_rel = relation_to_dep.get(p_label, "mod")
+                            curr_node_id = parent_id
+                        elif p_type == 'mod':
+                            curr_node_id = parent_id
+                        else:
+                            curr_node_id = parent_id
 
-                dependencies.append(f"{verb_tam_index}:mod")
+                    # Special case for "dry" as requested previously
+                    if 'dry' in mod_display and dep_rel == "mod":
+                        dep_rel = "krvn"
+
+                    dependencies.append(f"{parent_idx}:{dep_rel}")
+                    print(f"Modifier node: {internal_label} (Head: {parent_idx}, Dependency: {dep_rel})")
+                else:
+                    dependencies.append(f"{verb_tam_index}:mod")
                 continue
 
             if node_type == 'intensifier':
@@ -1486,8 +1508,9 @@ def graphtousr(input_graph, relations_file_path, recipe_id, db):
             
             # Words that require "until" prefix in output
             until_worthy_words = {
-                "golden", "brown", "cooked", "boiling", "soft", 
-                "aromatic", "fragrant", "smooth", "soften"
+                "golden", "gold", "golde", "brown", "cooked", "boiling", "soft", 
+                "aromatic", "fragrant", "smooth", "soften",
+                "golden-colour", "golden-color", "gold-colour", "gold-color"
             }
 
             for word in surface_ids:

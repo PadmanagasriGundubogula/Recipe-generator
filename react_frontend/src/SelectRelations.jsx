@@ -47,6 +47,7 @@ export default function SentenceRelations() {
   const [error, setError] = useState("");
   const [generatedText, setGeneratedText] = useState("");
   const [generatedHindiText, setGeneratedHindiText] = useState("");
+  const [recipeInfo, setRecipeInfo] = useState({ name: "", type: "", time: "", created_at: "" });
   const [generating, setGenerating] = useState(false);
   const [translating, setTranslating] = useState(false);
   const [showHowToUse, setShowHowToUse] = useState(false);
@@ -87,8 +88,15 @@ export default function SentenceRelations() {
         try {
           const recipeRes = await fetch(`http://localhost:2000/get-recipe/${recipeId}`);
           const recipeData = await recipeRes.json();
-          if (recipeRes.ok && recipeData.recipe_name) {
-            currentRecipeName = recipeData.recipe_name;
+          if (recipeRes.ok) {
+            const name = recipeData.recipe_name || "dish";
+            setRecipeInfo({
+              name: name,
+              type: recipeData.recipe_type || "N/A",
+              time: recipeData.cooking_time || "N/A",
+              created_at: recipeData.created_at
+            });
+            currentRecipeName = name;
           }
         } catch (e) {
           console.error("Error fetching recipe name:", e);
@@ -403,18 +411,50 @@ export default function SentenceRelations() {
     } finally {
       setGenerating(false);
     }
+  };
 
-    // 🌐 Automatically generate Hindi translation
-    if (generatedText) {
-      try {
-        setTranslating(true);
-        const translated = await translateText(generatedText, "hi", "en");
-        setGeneratedHindiText(translated);
-      } catch (err) {
-        console.error("Hindi translation failed:", err);
-      } finally {
-        setTranslating(false);
+  const handleDownload = async () => {
+    try {
+      const recipeId = localStorage.getItem("currentRecipeId");
+      if (!recipeId) return;
+
+      const recipeResp = await fetch(`http://localhost:2000/get-recipe/${recipeId}`);
+      const recipeData = await recipeResp.json();
+
+      const ingredients = Array.isArray(recipeData.ingredients) ? recipeData.ingredients.join(", ") : "N/A";
+      const stepsText = finalSteps.map((s, idx) => `${idx + 1}. ${s}`).join("\n");
+
+      let content = `RECIPE DETAILS\n` +
+        `====================\n` +
+        `Name: ${recipeInfo.name}\n` +
+        `Type: ${recipeInfo.type}\n` +
+        `duration to cook : ${recipeInfo.time}minutes\n` +
+        `Created At: ${recipeInfo.created_at ? new Date(recipeInfo.created_at).toLocaleString() : new Date().toLocaleString()}\n` +
+        `INGREDIENTS:\n` +
+        `${ingredients}\n\n` +
+        `STEPS:\n` +
+        `${stepsText}\n\n` +
+        `Generated with Recipe Generator 🍴\n`;
+
+      if (generatedText) {
+        content += `\n${generatedText}\n`;
       }
+      if (generatedHindiText) {
+        content += `\n${generatedHindiText}\n`;
+      }
+
+      const blob = new Blob([content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${recipeInfo.name.replace(/\s+/g, "_")}_recipe.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("Failed to download recipe.");
     }
   };
 
@@ -434,7 +474,7 @@ export default function SentenceRelations() {
       }
     };
     translateOutput();
-  }, [generatedText]);
+  }, [generatedText, generatedHindiText]);
 
   const handleRemoveFromFinal = (index) => {
     setFinalSteps(prev => prev.filter((_, i) => i !== index));
@@ -848,6 +888,14 @@ export default function SentenceRelations() {
                   <button
                     type="button"
                     className="secondary-btn"
+                    onClick={handleDownload}
+                    style={{ background: "#22c55e", color: "white" }}
+                  >
+                    📥 Download Recipe File
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn"
                     onClick={handleCopyFinal}
                   >
                     📋 Copy Final Text
@@ -868,34 +916,29 @@ export default function SentenceRelations() {
                     {generating ? (
                       <p className="muted">⏳ Generating running text...</p>
                     ) : (generatedText || generatedHindiText) ? (
-                      <div className="dual-preview" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                      <div className="dual-preview" style={{ display: "flex", flexDirection: "row", gap: "20px", flexWrap: "wrap" }}>
                         {generatedText && (
-                          <div className="en-preview">
-                            <h4 style={{ color: "#4c6fff", fontSize: "0.9rem", marginBottom: "8px" }}>English</h4>
+                          <div className="en-preview" style={{ flex: 1, minWidth: "300px", padding: "15px", background: "#f8fafc", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                            <h4 style={{ color: "#4c6fff", fontSize: "0.9rem", marginBottom: "8px", borderBottom: "1px solid #e2e8f0", paddingBottom: "5px" }}>English</h4>
                             <p style={{ whiteSpace: "pre-wrap", lineHeight: "1.6", color: "#1e293b" }}>
                               {generatedText}
                             </p>
                           </div>
                         )}
                         {translating ? (
-                          <p className="muted" style={{ fontSize: "0.8rem" }}>⏳ Translating to Hindi...</p>
+                          <p className="muted" style={{ fontSize: "0.8rem", flex: 1 }}>⏳ Translating to Hindi...</p>
                         ) : generatedHindiText && (
-                          <div className="hi-preview" style={{ borderTop: "1px solid #e2e8f0", paddingTop: "15px" }}>
-                            <h4 style={{ color: "#22c55e", fontSize: "0.9rem", marginBottom: "8px" }}>Hindi (हिंदी)</h4>
+                          <div className="hi-preview" style={{ flex: 1, minWidth: "300px", padding: "15px", background: "#f0fdf4", borderRadius: "10px", border: "1px solid #dcfce7" }}>
+                            <h4 style={{ color: "#22c55e", fontSize: "0.9rem", marginBottom: "8px", borderBottom: "1px solid #dcfce7", paddingBottom: "5px" }}>Hindi (हिंदी)</h4>
                             <p style={{ whiteSpace: "pre-wrap", lineHeight: "1.8", color: "#1e293b", fontSize: "1rem" }}>
                               {generatedHindiText}
                             </p>
                           </div>
                         )}
                       </div>
-                    ) : finalText.trim() ? (
-                      <div>
-                        <p className="muted">Preview (original steps):</p>
-                        <p>{finalText}</p>
-                      </div>
                     ) : (
                       <p className="muted">
-                        Your final recipe text will appear here as you add and arrange steps.
+                        Click "Generate Running Text" to combine your selected steps into a clean paragraph.
                       </p>
                     )}
                   </div>

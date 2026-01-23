@@ -330,38 +330,17 @@ const RecipeVisualBuilder = ({ lang }) => {
   useEffect(() => {
     const activeFilter = categoryFilter || "page1";
 
-    // SMART SEARCH: If user is typing in the search box, search EVERYTHING.
-    // Otherwise, show the filtered set (Page 1 or Type-based).
+    // If search is active, search the entire ingredients list
     if (ingredientPaletteSearch.trim().length > 0) {
       const filtered = ingredients.filter((ing) =>
         ing.name.toLowerCase().includes(ingredientPaletteSearch.toLowerCase())
       );
       setFilteredIngredients(filtered);
-    } else if (activeFilter === "page1") {
-      // Show ingredients from Page 1 PLUS any custom ones added in this session/by user
-      const page1Items = suggestedIngredients.map(name => ({
-        name,
-        emoji: "🥗",
-        displayName: name,
-        isCustom: false
-      }));
-      const customItems = ingredients.filter(ing => ing.isCustom);
-
-      // Merge and avoid duplicates by name
-      const merged = [...page1Items];
-      customItems.forEach(ci => {
-        if (!merged.some(m => m.name.toLowerCase() === ci.name.toLowerCase())) {
-          merged.push(ci);
-        }
-      });
-
-      setFilteredIngredients(merged);
-    } else if (activeFilter === "all") {
-      setFilteredIngredients(ingredients);
     } else {
-      const keywords = TYPE_KEYWORDS[activeFilter] || [];
+      // If not searching, ONLY show ingredients selected on Page 1 (filtered strictly)
+      const selectedNamesLower = suggestedIngredients.map(s => s.trim().replace(/\s+/g, "-").toLowerCase());
       const filtered = ingredients.filter((ing) =>
-        ing.isCustom || keywords.some((kw) => ing.name.toLowerCase().includes(kw))
+        selectedNamesLower.includes(ing.name.toLowerCase())
       );
       setFilteredIngredients(filtered);
     }
@@ -530,7 +509,26 @@ const RecipeVisualBuilder = ({ lang }) => {
           setRecipeType(data.recipe_type || "N/A");
           setRecipeDuration(data.cooking_time || data.cooking_duration || "N/A");
           setCategoryFilter(data.recipe_type || "all");
-          setSuggestedIngredients(data.ingredients || []);
+
+          const sIngs = data.ingredients || [];
+          setSuggestedIngredients(sIngs);
+
+          // Ensure these ingredients exist in the main ingredients list
+          // even if they aren't in the global "default" or "custom" collections
+          setIngredients(prev => {
+            const newPrev = [...prev];
+            sIngs.forEach(name => {
+              if (!newPrev.some(ing => ing.name.toLowerCase() === name.toLowerCase())) {
+                newPrev.push({
+                  name,
+                  displayName: name,
+                  emoji: "🥗",
+                  isCustom: false
+                });
+              }
+            });
+            return newPrev;
+          });
         } else {
           console.error("Failed to fetch recipe info:", data.error || data);
         }
@@ -627,7 +625,20 @@ const RecipeVisualBuilder = ({ lang }) => {
 
       switch (type) {
         case "ingredient":
-          setIngredients(uiItems.filter((i) => !i.isOther));
+          setIngredients((prev) => {
+            // Filter out non-suggested items that are being re-loaded
+            const filteredPrev = prev.filter(p => suggestedIngredients.some(s => s.toLowerCase() === p.name.toLowerCase()));
+            const newItems = uiItems.filter((i) => !i.isOther);
+
+            // Merge: newItems + any suggested items that weren't in newItems
+            const merged = [...newItems];
+            filteredPrev.forEach(p => {
+              if (!merged.some(m => m.name.toLowerCase() === p.name.toLowerCase())) {
+                merged.push(p);
+              }
+            });
+            return merged;
+          });
           setOtherIngredients(uiItems.filter((i) => i.isOther));
           break;
         case "action":
@@ -718,15 +729,7 @@ const RecipeVisualBuilder = ({ lang }) => {
       setShowTAMSelector(true);
     } else if (type === "temporal") {
       let temporalValue = finalValue;
-      const stateDurations = ["golden", "brown", "cooked", "boiling", "soft", "aromatic", "fragrant", "smooth"];
-      if (typeof temporalValue === "string") {
-        const lower = temporalValue.toLowerCase();
-        if (stateDurations.includes(lower)) {
-          temporalValue = "until-" + temporalValue;
-        } else if (lower === "overnight") {
-          temporalValue = "for-" + temporalValue;
-        }
-      }
+      // prefixing removed for UI display - will be added in generateInstruction
 
       // mark placeholder items (containing 'X') as duration templates
       const isTemplate = typeof temporalValue === "string" && (temporalValue.includes("X") || temporalValue.toLowerCase().includes("for"));
@@ -760,19 +763,16 @@ const RecipeVisualBuilder = ({ lang }) => {
         return;
       }
 
-      let componentValue = finalValue;
-      if (type === "descriptor") {
-        const stateDurations = ["golden", "brown", "cooked", "boiling", "soft", "aromatic", "fragrant", "smooth"];
-        if (typeof componentValue === "string" && stateDurations.includes(componentValue.toLowerCase())) {
-          componentValue = "until-" + componentValue;
-        }
-      }
-
-      const component = { type, value: componentValue, emoji };
+      const component = { type, value: finalValue, emoji };
       if (type === "ingredient") {
-        // If there's already an ingredient in the current instruction, ask for connection
-        const hasExistingIngredient = currentInstruction.some(c => c.type === "ingredient");
-        if (hasExistingIngredient) {
+        // 🔥 IMPROVED: Only ask for connection if the PREVIOUS ingredient is still "open" (not yet followed by a relation)
+        const lastIngIndex = [...currentInstruction].reverse().findIndex(c => c.type === "ingredient");
+        const realLastIngIndex = lastIngIndex === -1 ? -1 : currentInstruction.length - 1 - lastIngIndex;
+
+        const hasOpenIngredient = realLastIngIndex !== -1 &&
+          !currentInstruction.slice(realLastIngIndex + 1).some(c => c.type === "relation");
+
+        if (hasOpenIngredient) {
           setPendingIngredientForConnection(component);
           setShowConnectionPrompt(true);
         } else {
@@ -1235,6 +1235,10 @@ const RecipeVisualBuilder = ({ lang }) => {
               nounRelation.startMeasurements = { [activeRelation.span.start || ""]: unit };
               nounRelation.endMeasurements = { [activeRelation.span.end || ""]: unit };
             }
+            // Add mod/intf tracks for simple concepts too
+            nounRelation.nounModifiers = { [ing.value]: ing.modifiers || [] };
+            nounRelation.nounIntensifiers = { [ing.value]: [] };
+
             instruction.nounRelations.push(nounRelation);
           } else {
             const names = pendingIngsGroup.map((ing) => ing.value);
@@ -1257,7 +1261,7 @@ const RecipeVisualBuilder = ({ lang }) => {
               nounRelation.quantities[n] = ing.quantity || "";
               nounRelation.measurements[n] = ing.measurement || "";
               nounRelation.measureTypes[n] = (ing.quantity || ing.measurement) ? "simple" : "none";
-              nounRelation.nounModifiers[n] = [];
+              nounRelation.nounModifiers[n] = ing.modifiers || [];
               nounRelation.nounIntensifiers[n] = [];
             });
             instruction.nounRelations.push(nounRelation);
@@ -1267,17 +1271,82 @@ const RecipeVisualBuilder = ({ lang }) => {
           activeRelation = null;
         }
       } else if (component.type === "descriptor") {
-        const desc = component.value.toLowerCase();
+        let desc = component.value.toLowerCase();
+        const stateDurations = ["golden", "gold", "golde", "brown", "cooked", "boiling", "soft", "soften", "aromatic", "fragrant", "smooth"];
+        const isStateMatch = stateDurations.some(s => desc === s || desc.startsWith(s + "-") || desc.startsWith(s + " "));
+
+        if (isStateMatch && !desc.startsWith("until-")) {
+          desc = "until-" + desc;
+        }
+
         let relation = "mod";
         if (["as-per-taste", "as-per-tastes"].includes(desc)) relation = "krvn";
-        instruction.descriptors.push({ value: desc, relation: relation, actionIndex: currentActionIndex });
+
+        // 🔥 REFINED STICKY DESCRIPTOR LOGIC:
+        const prevComp = currentInstruction[i - 1];
+        let attachedToNoun = false;
+        const canStick = !desc.startsWith("until-");
+
+        if (canStick) {
+          // 1. Check if we follow an ingredient currently in the pending group
+          if (pendingIngsGroup.length > 0 && prevComp.type === "ingredient") {
+            const lastIng = pendingIngsGroup[pendingIngsGroup.length - 1];
+            lastIng.modifiers = lastIng.modifiers || [];
+            lastIng.modifiers.push(desc);
+            attachedToNoun = true;
+          }
+          // 2. Check if we follow a sealed SINGLE noun
+          else {
+            const lastNounRel = instruction.nounRelations[instruction.nounRelations.length - 1];
+            // Only stick to "SimpleConcept" results, and only if we aren't currently building a new group
+            if (lastNounRel && lastNounRel.relationType === "SimpleConcept" && pendingIngsGroup.length === 0) {
+              const nounKey = lastNounRel.noun;
+              if (nounKey) {
+                lastNounRel.nounModifiers[nounKey] = lastNounRel.nounModifiers[nounKey] || [];
+                lastNounRel.nounModifiers[nounKey].push(desc);
+                attachedToNoun = true;
+              }
+            }
+          }
+        }
+
+        if (!attachedToNoun) {
+          const nextComp = currentInstruction[i + 1];
+          if (nextComp && nextComp.type === "relation") {
+            relation = nextComp.value;
+            i++;
+          }
+          instruction.descriptors.push({ value: desc, relation: relation, actionIndex: currentActionIndex });
+        }
       } else if (component.type === "temporal") {
-        const val = component.durationNumber || component.value;
-        const lowerVal = String(val).toLowerCase();
+        let val = component.durationNumber || component.value;
+        let lowerVal = String(val).toLowerCase();
+
+        const stateDurations = ["golden", "gold", "golde", "brown", "cooked", "boiling", "soft", "soften", "aromatic", "fragrant", "smooth"];
+        const isStateMatch = stateDurations.some(s => lowerVal === s || lowerVal.startsWith(s + "-") || lowerVal.startsWith(s + " "));
+
+        if (isStateMatch && !lowerVal.startsWith("until-")) {
+          val = "until-" + lowerVal;
+          lowerVal = val.toLowerCase();
+        } else if (lowerVal === "overnight") {
+          val = "for-overnight";
+          lowerVal = val.toLowerCase();
+        } else if (component.durationNumber && !lowerVal.startsWith("for-")) {
+          // Add for- to numeric durations
+          val = "for-" + val;
+          lowerVal = val.toLowerCase();
+        }
+
         let relation = "k7t";
         if (["immediately", "eventually", "as-per-needed"].includes(lowerVal)) relation = "krvn";
         else if (["soon", "always", "never", "sometimes", "often", "rarely", "frequently"].includes(lowerVal)) relation = "freq";
         else if (component.durationNumber) relation = "dur";
+
+        const nextComp = currentInstruction[i + 1];
+        if (nextComp && nextComp.type === "relation") {
+          relation = nextComp.value;
+          i++;
+        }
 
         instruction.temporals.push({
           value: val,
@@ -1580,6 +1649,13 @@ const RecipeVisualBuilder = ({ lang }) => {
       small: "mod",
       red: "mod",
       cool: "mod",
+      "until-golden": "k7t",
+      "until-brown": "k7t",
+      "until-cooked": "k7t",
+      "until-boiling": "k7t",
+      "until-golden-colour": "k7t",
+      "until-golden-color": "k7t",
+      "for-overnight": "k7t",
 
       howlong: "dur",
       minutes: "dur",
@@ -1821,6 +1897,7 @@ const RecipeVisualBuilder = ({ lang }) => {
 
         if (uiLang === "en" || uiLang === "hi") {
           setIngredients((prev) => [...prev, newItem]);
+          setSuggestedIngredients((prev) => [...prev, englishName]);
         }
 
         setShowIngredientForm(false);
@@ -2288,20 +2365,7 @@ const RecipeVisualBuilder = ({ lang }) => {
                   />
                 </div>
                 <div className="entity-grid" style={{ height: "220px" }}>
-                  {ingredients
-                    .filter(ing => {
-                      const matchesSearch = ing.name.toLowerCase().includes(ingredientPaletteSearch.toLowerCase());
-                      const isSelected = suggestedIngredients.some(s => {
-                        const normS = s.trim().replace(/\s+/g, "-").toLowerCase();
-                        const normIng = ing.name.trim().replace(/\s+/g, "-").toLowerCase();
-                        return normS === normIng;
-                      });
-                      // If searching, show all matches. If not, only show selected ones.
-                      if (ingredientPaletteSearch.trim() === "") {
-                        return isSelected;
-                      }
-                      return matchesSearch;
-                    })
+                  {filteredIngredients
                     .map((ing, idx) => (
                       <div
                         key={idx}
@@ -2546,7 +2610,7 @@ const RecipeVisualBuilder = ({ lang }) => {
                     currentInstruction.map((comp, idx) => (
                       <div key={idx} className={`dropped-chip ${comp.type}`} style={{ padding: "3px 8px", fontSize: "0.62rem", borderRadius: "8px" }}>
                         <span className="chip-emoji">{comp.emoji}</span>
-                        <span className="chip-text">{comp.actionName || (comp.value && String(comp.value).split("-")[0])}</span>
+                        <span className="chip-text">{comp.actionName || (comp.value && String(comp.value).replace(/-/g, " "))}</span>
                         {comp.type === "ingredient" && (
                           <div className="ingredient-meta" style={{ display: "flex", gap: "4px", marginLeft: "4px" }}>
                             <input
@@ -2799,97 +2863,6 @@ const RecipeVisualBuilder = ({ lang }) => {
           />
         )}
 
-        {showActionTemporalPopup && (
-          <div className="popup-overlay" onClick={() => setShowActionTemporalPopup(false)}>
-            <div className="popup-box" onClick={(e) => e.stopPropagation()}>
-              <h3>Select Temporal Modifier for Action</h3>
-
-              <div className="popup-list">
-
-                {/* for X minutes */}
-                <div className="popup-item" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span>for</span>
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="0"
-                    style={{ width: "60px" }}
-                    onChange={(e) => setSelectedActionTemporalModifier(`for ${e.target.value} minutes`)}
-                  />
-                  <span>minutes</span>
-                </div>
-
-                {/* for X hours */}
-                <div className="popup-item" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span>for</span>
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="0"
-                    style={{ width: "60px" }}
-                    onChange={(e) => setSelectedActionTemporalModifier(`for ${e.target.value} hours`)}
-                  />
-                  <span>hours</span>
-                </div>
-
-                {/* Render remaining modifiers normally */}
-                {actionTemporalModifiers
-                  .filter(
-                    (m) => m !== "for X minutes" && m !== "for X hours"
-                  )
-                  .map((mod, i) => (
-                    <div
-                      key={i}
-                      className={`popup-item ${selectedActionTemporalModifier === mod ? "selected" : ""}`}
-                      onClick={() => setSelectedActionTemporalModifier(mod)}
-                    >
-                      {mod}
-                    </div>
-                  ))}
-              </div>
-
-
-              <div className="popup-buttons">
-                <button
-                  onClick={() => {
-                    const compToAdd = {
-                      ...pendingActionComponent,
-                      temporalModifier: selectedActionTemporalModifier || null,
-                    };
-                    setCurrentInstruction((prev) => [...prev, compToAdd]);
-                    setShowActionTemporalPopup(false);
-                    setPendingActionComponent(null);
-                    setSelectedActionTemporalModifier("");
-                  }}
-                >
-                  Confirm
-                </button>
-
-                <button
-                  onClick={() => {
-                    const compToAdd = { ...pendingActionComponent, temporalModifier: null };
-                    setCurrentInstruction((prev) => [...prev, compToAdd]);
-                    setShowActionTemporalPopup(false);
-                    setPendingActionComponent(null);
-                    setSelectedActionTemporalModifier("");
-                  }}
-                >
-                  Skip
-                </button>
-
-                <button
-                  onClick={() => {
-                    setPendingActionComponent(null);
-                    setSelectedActionTemporalModifier("");
-                    setShowActionTemporalPopup(false);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
         {showDurationPopup && (
           <div className="popup-overlay" onClick={() => setShowDurationPopup(false)}>
             <div className="popup-box" onClick={(e) => e.stopPropagation()}>
@@ -3246,7 +3219,7 @@ const RelationPrompt = ({ onConfirm, onSkip, type, currentItem }) => {
   const generalRelations = [
     "What (subject) - क्या-कर्ता",
     "What (object) - क्या-कर्म",
-    "How (instrument) - कैसे-करण",
+    "How - कैसे",
     "Whom (recipient) - किसके लिए-सम्प्रदान",
     "From where (source) - कहाँ से-अपादान",
     "Where (place) - कहाँ-अधिकरण/देश",
