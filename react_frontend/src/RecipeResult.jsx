@@ -2,8 +2,12 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Info } from "lucide-react";
+import { driver } from "driver.js";
+import "driver.js/dist/driver.css";
 import { API_URL } from "./config";
 import "./recipeResult.css";
+import AudioInput from "./AudioInput";
+import GuidedAudioInput from "./GuidedAudioInput";
 import { translateText } from "./translate";
 
 /* ====================== UNIT DROPDOWN COMPONENT ====================== */
@@ -138,6 +142,7 @@ const UI_STRINGS = {
     otherEntitiesTitle: "Other Entities",
     relationsTitle: "Relations",
     instructionBuilderTitle: "Instruction Builder",
+    verbsTitle: "State",
     instructionBuilderSubtitle:
       "Click components from the left & build the cooking step",
     dropTitle: "Click items to build your instruction",
@@ -170,6 +175,7 @@ const UI_STRINGS = {
     otherEntitiesTitle: "अन्य इकाइयाँ",
     relationsTitle: "संबंध",
     instructionBuilderTitle: "निर्देश तैयारकर्ता",
+    verbsTitle: "क्रिया",
     instructionBuilderSubtitle:
       "बाएँ से घटक पर क्लिक करें और कुकिंग स्टेप बनाएं",
     dropTitle: "गठन के लिए आइटम पर क्लिक करें",
@@ -206,6 +212,10 @@ const RecipeVisualBuilder = ({ lang }) => {
     (UI_STRINGS[activeLang] && UI_STRINGS[activeLang][key]) ||
     UI_STRINGS.en[key] ||
     key;
+
+  const [paletteTab, setPaletteTab] = useState("actions"); // mobile only
+  const [outputTab, setOutputTab] = useState("usr"); // mobile only
+
 
   // ==== STATE ====
   const [recipeName, setRecipeName] = useState("");
@@ -266,6 +276,7 @@ const RecipeVisualBuilder = ({ lang }) => {
   const [pendingAction, setPendingAction] = useState(null);
   const [showRelationPrompt, setShowRelationPrompt] = useState(false);
   const [showGraphModal, setShowGraphModal] = useState(false); // zoom graph
+  const [showUSRModal, setShowUSRModal] = useState(false); // zoom USR
   const [ingredientsSearch, setIngredientsSearch] = useState("");
   const [showToolForm, setShowToolForm] = useState(false);
   const [showHowToUse, setShowHowToUse] = useState(false);
@@ -278,6 +289,9 @@ const RecipeVisualBuilder = ({ lang }) => {
   // Connection Prompt State (for and/or between ingredients)
   const [showConnectionPrompt, setShowConnectionPrompt] = useState(false);
   const [pendingIngredientForConnection, setPendingIngredientForConnection] = useState(null);
+  const [showAddNewPopup, setShowAddNewPopup] = useState(false);
+  const [showOtherNounForm, setShowOtherNounForm] = useState(false);
+  const [showGuidedVoice, setShowGuidedVoice] = useState(false);
 
   // 🧰 Tools / Objects
   const [tools, setTools] = useState([]);
@@ -328,48 +342,29 @@ const RecipeVisualBuilder = ({ lang }) => {
 
   // Update filtered ingredients when palette or category filter changes
   useEffect(() => {
-    const activeFilter = categoryFilter || "page1";
-
-    // If search is active, search the entire ingredients list
+    // If search is active, search ALL loaded ingredients
     if (ingredientPaletteSearch.trim().length > 0) {
       const filtered = ingredients.filter((ing) =>
         ing.name.toLowerCase().includes(ingredientPaletteSearch.toLowerCase())
       );
       setFilteredIngredients(filtered);
     } else {
-      // If not searching, ONLY show ingredients selected on Page 1 (filtered strictly)
-      const selectedNamesLower = suggestedIngredients.map(s => s.trim().replace(/\s+/g, "-").toLowerCase());
-      const filtered = ingredients.filter((ing) =>
-        selectedNamesLower.includes(ing.name.toLowerCase())
-      );
+      // Normalize names for comparison
+      const selectedNamesLower = suggestedIngredients.map(s => {
+        const normalized = s.trim().toLowerCase();
+        return [normalized, normalized.replace(/\s+/g, "-")];
+      }).flat();
+
+      const filtered = ingredients.filter((ing) => {
+        const ingNameLower = ing.name.toLowerCase();
+        const ingNameHyphenated = ing.name.toLowerCase().replace(/\s+/g, "-");
+        return selectedNamesLower.includes(ingNameLower) || selectedNamesLower.includes(ingNameHyphenated);
+      });
       setFilteredIngredients(filtered);
     }
+  }, [ingredients, suggestedIngredients, ingredientPaletteSearch]);
 
-    // If search yields no results across any category, show alert
-    const checkSearch = (term, list, label) => {
-      if (term.trim().length > 2) {
-        const found = list.some(item => {
-          if (!item) return false;
-          const name = item.name || item.recipe_name || (typeof item === 'string' ? item : '');
-          return name.toLowerCase().includes(term.toLowerCase());
-        });
 
-        if (!found) {
-          const timer = setTimeout(() => {
-            showToast(`${term} not found in ${label}`);
-          }, 1000);
-          return () => clearTimeout(timer);
-        }
-      }
-    };
-
-    checkSearch(ingredientPaletteSearch, filteredIngredients, "Ingredients");
-    checkSearch(actionsSearch, actions, "Actions");
-    checkSearch(descriptorsSearch, descriptors, "Descriptors");
-    checkSearch(toolsSearch, tools, "Tools");
-    checkSearch(recipesSearch, [...userRecipes, recipeName], "Recipes");
-
-  }, [ingredients, categoryFilter, suggestedIngredients, actions, descriptors, tools, otherIngredients, ingredientPaletteSearch, actionsSearch, descriptorsSearch, toolsSearch, recipesSearch]);
 
   const relationWords = [
     "What(subject)",
@@ -494,12 +489,20 @@ const RecipeVisualBuilder = ({ lang }) => {
   // ==== INIT ====
   useEffect(() => {
     const init = async () => {
+      const userId = localStorage.getItem("user_id");
+      if (!userId) {
+        navigate("/login");
+        return;
+      }
+
       const recipeId = localStorage.getItem("currentRecipeId");
       if (!recipeId) {
-        alert("No recipe selected. Please create one first.");
+        // alert("No recipe selected. Please create one first."); // Removed alert to prevent annoying popups on accidental navigation
         navigate("/page1");
         return;
       }
+
+      let initialIngredients = [];
 
       try {
         const res = await fetch(`${API_URL}/get-recipe/${recipeId}`);
@@ -511,6 +514,7 @@ const RecipeVisualBuilder = ({ lang }) => {
           setCategoryFilter(data.recipe_type || "all");
 
           const sIngs = data.ingredients || [];
+          initialIngredients = sIngs;
           setSuggestedIngredients(sIngs);
 
           // Ensure these ingredients exist in the main ingredients list
@@ -536,7 +540,8 @@ const RecipeVisualBuilder = ({ lang }) => {
         console.error("Error fetching recipe info:", err);
       }
 
-      await loadAllItems("ingredient", normLang);
+      await loadAllItems("ingredient", normLang, initialIngredients);
+
       await loadAllItems("action", normLang);
       await loadAllItems("descriptor", normLang);
       await loadAllItems("tool", normLang);
@@ -592,8 +597,34 @@ const RecipeVisualBuilder = ({ lang }) => {
     }
   }, [currentInstruction, isDraftLoading]);
 
+  // 🥄 Ensure all suggested ingredients (from Page 1) are in the palette
+  useEffect(() => {
+    if (suggestedIngredients.length === 0) return;
+
+    setIngredients(prev => {
+      const merged = [...prev];
+      const mergedNames = new Set(merged.map(m => m.name.toLowerCase()));
+
+      let changed = false;
+      suggestedIngredients.forEach(sName => {
+        if (!mergedNames.has(sName.toLowerCase())) {
+          merged.push({
+            name: sName,
+            displayName: sName,
+            emoji: "🥗",
+            isCustom: true
+          });
+          mergedNames.add(sName.toLowerCase());
+          changed = true;
+        }
+      });
+
+      return changed ? merged : prev;
+    });
+  }, [suggestedIngredients]);
+
   // Load & translate palette items
-  const loadAllItems = async (type, language) => {
+  const loadAllItems = async (type, language, extraSuggestions = []) => {
     const targetLang = language === "hi" ? "hi" : "en";
     const apiType = type === "tool" ? "other" : type;
 
@@ -626,17 +657,30 @@ const RecipeVisualBuilder = ({ lang }) => {
       switch (type) {
         case "ingredient":
           setIngredients((prev) => {
-            // Filter out non-suggested items that are being re-loaded
-            const filteredPrev = prev.filter(p => suggestedIngredients.some(s => s.toLowerCase() === p.name.toLowerCase()));
             const newItems = uiItems.filter((i) => !i.isOther);
 
-            // Merge: newItems + any suggested items that weren't in newItems
+            // 🔥 RESILIENT MERGE:
+            // Use explicitly passed suggestions if available (fixes init race condition), 
+            // otherwise use state (for subsequent updates)
+            const suggestionsToUse = extraSuggestions.length > 0 ? extraSuggestions : suggestedIngredients;
+
             const merged = [...newItems];
-            filteredPrev.forEach(p => {
-              if (!merged.some(m => m.name.toLowerCase() === p.name.toLowerCase())) {
-                merged.push(p);
+            const mergedNames = new Set(merged.map(m => m.name.toLowerCase()));
+
+            suggestionsToUse.forEach(sName => {
+              // Normalize names: replace hyphens with spaces for display if needed, or keep consistent
+              // We compare lowercased for uniqueness
+              if (!mergedNames.has(sName.toLowerCase())) {
+                merged.push({
+                  name: sName,
+                  displayName: sName, // You might want to translate this too if possible, but safe fallback is name
+                  emoji: "🥗",
+                  isCustom: true
+                });
+                mergedNames.add(sName.toLowerCase());
               }
             });
+
             return merged;
           });
           setOtherIngredients(uiItems.filter((i) => i.isOther));
@@ -679,8 +723,21 @@ const RecipeVisualBuilder = ({ lang }) => {
       const listWithText = await Promise.all(
         instructionsList.map(async (i) => {
           const text = i.text || i.instruction_text || "";
-          const translated =
-            normLang !== "en" ? await translateText(text, normLang, "en") : text;
+
+          // 🔹 Smart Translation:
+          // 1. If instruction has a language field, only translate if it doesn't match normLang
+          // 2. Otherwise fall back to the old logic (translate if not English)
+          let translated = text;
+          const instLang = i.language || "english";
+          const currentUiLang = normLang === "hi" ? "hindi" : "english";
+
+          if (instLang !== currentUiLang) {
+            console.debug(`Translating instruction from ${instLang} to ${currentUiLang}`);
+            translated = await translateText(text, normLang, instLang === "hindi" ? "hi" : "en");
+          } else {
+            console.debug(`Skipping translation for instruction (already ${currentUiLang})`);
+          }
+
           return {
             sentence_id: i.sentence_id || i.sentenceId || null,
             text: translated,
@@ -688,7 +745,8 @@ const RecipeVisualBuilder = ({ lang }) => {
             step_number: i.step_number || null,
             usr_id: i.usr_id || null,
             graph_id: i.graph_id || null,
-            instruction_payload: i.instruction_payload || []
+            instruction_payload: i.instruction_payload || [],
+            language: i.language
           };
         })
       );
@@ -717,7 +775,7 @@ const RecipeVisualBuilder = ({ lang }) => {
     }
   };
 
-  const toggleItemSelection = (type, value, emoji) => {
+  const toggleItemSelection = (type, value, emoji, isBeVerb = false) => {
     let finalValue = value;
     if (typeof value === "string") {
       finalValue = value.trim().replace(/\s+/g, "-");
@@ -725,11 +783,21 @@ const RecipeVisualBuilder = ({ lang }) => {
 
     // Basic logic to add item to currentInstruction
     if (type === "action") {
-      setPendingAction({ value: finalValue, emoji });
+      setPendingAction({ value: finalValue, emoji, isBeVerb });
       setShowTAMSelector(true);
     } else if (type === "temporal") {
       let temporalValue = finalValue;
       // prefixing removed for UI display - will be added in generateInstruction
+
+      // Check if already exists (toggle off)
+      const exists = currentInstruction.some(c => c.type === "temporal" && c.value === temporalValue);
+      if (exists) {
+        if (window.confirm(`${temporalValue} is already in the builder. Do you want to remove it?`)) {
+          const idx = currentInstruction.findIndex(c => c.type === "temporal" && c.value === temporalValue);
+          if (idx !== -1) removeComponent(idx);
+        }
+        return;
+      }
 
       // mark placeholder items (containing 'X') as duration templates
       const isTemplate = typeof temporalValue === "string" && (temporalValue.includes("X") || temporalValue.toLowerCase().includes("for"));
@@ -738,17 +806,33 @@ const RecipeVisualBuilder = ({ lang }) => {
         setShowDurationPopup(true);
       } else {
         const temporalComponent = { value: temporalValue, emoji, type: "temporal" };
-        setCurrentInstruction((prev) => [...prev, temporalComponent]);
+        setCurrentInstruction((prev) => {
+          if (prev.some((c) => c.type === "temporal" && c.value === temporalValue)) return prev;
+          return [...prev, temporalComponent];
+        });
         setShowRelationPrompt(true);
       }
     } else if (type === "tool") {
+      // Check if already exists (toggle off)
+      const exists = currentInstruction.some(c => c.type === "tool" && c.value === finalValue);
+      if (exists) {
+        if (window.confirm(`${finalValue} is already in the builder. Do you want to remove it?`)) {
+          const idx = currentInstruction.findIndex(c => c.type === "tool" && c.value === finalValue);
+          if (idx !== -1) removeComponent(idx);
+        }
+        return;
+      }
+
       const toolComponent = {
         type: "tool",
         value: finalValue,
         emoji,
         relation: null
       };
-      setCurrentInstruction((prev) => [...prev, toolComponent]);
+      setCurrentInstruction((prev) => {
+        if (prev.some((c) => c.type === "tool" && c.value === finalValue)) return prev;
+        return [...prev, toolComponent];
+      });
       setShowRelationPrompt(true);
     } else {
       // Check if already exists (prompt to remove)
@@ -765,14 +849,11 @@ const RecipeVisualBuilder = ({ lang }) => {
 
       const component = { type, value: finalValue, emoji };
       if (type === "ingredient") {
-        // 🔥 IMPROVED: Only ask for connection if the PREVIOUS ingredient is still "open" (not yet followed by a relation)
-        const lastIngIndex = [...currentInstruction].reverse().findIndex(c => c.type === "ingredient");
-        const realLastIngIndex = lastIngIndex === -1 ? -1 : currentInstruction.length - 1 - lastIngIndex;
+        // 🔥 CHANGED: Always ask for connection if there is ANY previous ingredient
+        // This supports the flow: [Ing1] [Rel] -> Add Ing2 -> Prompt "AND/OR" -> [Ing1] [Rel] [AND] [Ing2] [Rel]
+        const hasExistingIngredient = currentInstruction.some(c => c.type === "ingredient");
 
-        const hasOpenIngredient = realLastIngIndex !== -1 &&
-          !currentInstruction.slice(realLastIngIndex + 1).some(c => c.type === "relation");
-
-        if (hasOpenIngredient) {
+        if (hasExistingIngredient) {
           setPendingIngredientForConnection(component);
           setShowConnectionPrompt(true);
         } else {
@@ -780,10 +861,31 @@ const RecipeVisualBuilder = ({ lang }) => {
           setShowSemanticPopup(true);
         }
       } else if (type === "descriptor") {
-        setCurrentInstruction((prev) => [...prev, component]);
-        setShowRelationPrompt(true);
+        // Check if we have a "be" verb - if so, use k1s relation instead of asking
+        const hasBeVerb = currentInstruction.some(c => c.type === "action_tam" && c.isBeVerb);
+        if (hasBeVerb) {
+          // Automatically assign k1s relation for "be" + descriptor
+          const descriptorWithRelation = {
+            ...component,
+            relation: "k1s", // k1s relation
+            autoRelation: "k1s"
+          };
+          setCurrentInstruction((prev) => {
+            if (prev.some((c) => c.type === component.type && c.value === component.value)) return prev;
+            return [...prev, descriptorWithRelation];
+          });
+        } else {
+          setCurrentInstruction((prev) => {
+            if (prev.some((c) => c.type === "descriptor" && c.value === component.value)) return prev;
+            return [...prev, component];
+          });
+          setShowRelationPrompt(true);
+        }
       } else {
-        setCurrentInstruction((prev) => [...prev, component]);
+        setCurrentInstruction((prev) => {
+          if (prev.some((c) => c.type === component.type && c.value === component.value)) return prev;
+          return [...prev, component];
+        });
       }
     }
   };
@@ -850,14 +952,8 @@ const RecipeVisualBuilder = ({ lang }) => {
     }
 
     if (type === "ingredient") {
-      const lastIngredientIndex = getLastIngredientIndex();
-      if (
-        lastIngredientIndex !== -1 &&
-        !hasRelationAfterIndex(lastIngredientIndex)
-      ) {
-        alert("Please add a relation for the previous ingredient first.");
-        return;
-      }
+      // 🔥 CHANGED: Always ask for connection if there is ANY previous ingredient
+      const hasExistingIngredient = currentInstruction.some(c => c.type === "ingredient");
 
       const ingredientComponent = {
         ...data,
@@ -865,8 +961,6 @@ const RecipeVisualBuilder = ({ lang }) => {
         measurement: "",
       };
 
-      // Check for connection if already has ingredients
-      const hasExistingIngredient = currentInstruction.some(c => c.type === "ingredient");
       if (hasExistingIngredient) {
         setPendingIngredientForConnection(ingredientComponent);
         setShowConnectionPrompt(true);
@@ -884,15 +978,6 @@ const RecipeVisualBuilder = ({ lang }) => {
     }
     if (type === "temporal") {
       let val = data.value;
-      const stateDurations = ["golden", "brown", "cooked", "boiling", "soft", "aromatic", "fragrant", "smooth"];
-      if (typeof val === "string") {
-        const lower = val.toLowerCase();
-        if (stateDurations.includes(lower)) {
-          val = "until-" + val;
-        } else if (lower === "overnight") {
-          val = "for-" + val;
-        }
-      }
 
       // duration objects (ex: {isDuration: true})
       if (val && typeof val === "string" && (val.includes("X") || val.toLowerCase().includes("for"))) {
@@ -909,13 +994,6 @@ const RecipeVisualBuilder = ({ lang }) => {
     }
 
     let itemValue = data.value;
-    if (type === "descriptor") {
-      const stateDurations = ["golden", "brown", "cooked", "boiling", "soft", "aromatic", "fragrant", "smooth"];
-      if (typeof itemValue === "string" && stateDurations.includes(itemValue.toLowerCase())) {
-        itemValue = "until-" + itemValue;
-      }
-    }
-
     const finalData = { ...data, value: itemValue };
     setCurrentInstruction((prev) => [...prev, finalData]);
     if (type === "ingredient" || type === "descriptor") {
@@ -942,7 +1020,7 @@ const RecipeVisualBuilder = ({ lang }) => {
     currentInstruction.slice(index + 1).some((c) => c.type === "relation");
 
   // ==== POPUP CONFIRMS ====
-  const confirmSemanticCategory = (semantic, morpho) => {
+  const confirmSemanticCategory = async (semantic, morpho) => {
     if (!pendingIngredient) return;
 
     const data = {
@@ -956,6 +1034,24 @@ const RecipeVisualBuilder = ({ lang }) => {
     );
     storedSemantics[data.value.toLowerCase()] = { semantic, morpho };
     localStorage.setItem("semanticData", JSON.stringify(storedSemantics));
+
+    // persist if new ingredient
+    if (data.type === "ingredient") {
+      const recipeId = localStorage.getItem("currentRecipeId");
+      if (recipeId && !suggestedIngredients.some(s => s.toLowerCase() === data.value.toLowerCase())) {
+        const newList = [...suggestedIngredients, data.value];
+        try {
+          await fetch(`${API_URL}/save-selection`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ recipe_id: recipeId, ingredients: newList })
+          });
+          setSuggestedIngredients(newList);
+        } catch (err) {
+          console.error("Failed to sync new ingredient to recipe:", err);
+        }
+      }
+    }
 
     setCurrentInstruction((prev) => [...prev, data]);
     setShowSemanticPopup(false);
@@ -1016,6 +1112,7 @@ const RecipeVisualBuilder = ({ lang }) => {
       tam: tam,
       emoji: `${pendingAction.emoji}⏱️`,
       temporalModifier: null, // no temporal modifier
+      isBeVerb: pendingAction.isBeVerb || false, // preserve isBeVerb flag
     };
 
     // ✅ DIRECTLY add the action to the builder
@@ -1098,6 +1195,7 @@ const RecipeVisualBuilder = ({ lang }) => {
     setGraphImage("");
     setUsrTableHtml("");
     setEnglishSentences([]);
+    setLastSpokenText(""); // Clear voice transcript
     setShowRelationPrompt(false);
     setPendingIngredient(null);
     setPendingAction(null);
@@ -1119,6 +1217,8 @@ const RecipeVisualBuilder = ({ lang }) => {
       alert("You must include at least one action with TAM.");
       return;
     }
+
+    const stateDurations = ["golden", "gold", "golde", "brown", "cooked", "boiling", "soft", "soften", "aromatic", "fragrant", "smooth"];
 
     const primaryAction = allActions[0];
     const toolsWithoutRelation = currentInstruction.filter(
@@ -1183,6 +1283,7 @@ const RecipeVisualBuilder = ({ lang }) => {
     let pendingIngsGroup = [];
     let groupType = "SimpleConcept";
     let activeRelation = null;
+    let pendingModifiers = [];
 
     for (let i = 0; i < currentInstruction.length; i++) {
       const component = currentInstruction[i];
@@ -1201,8 +1302,15 @@ const RecipeVisualBuilder = ({ lang }) => {
         let moreInGroup = false;
         while (j < currentInstruction.length) {
           const next = currentInstruction[j];
-          if (next.type === "ingredient" || next.type === "connection") {
+          if (next.type === "connection") {
             moreInGroup = true;
+            break;
+          }
+          if (next.type === "ingredient") {
+            // Hit an ingredient but NO connection? 
+            // This means we have: [Ing] [Relation] [Ing]...
+            // The second ingredient is a NEW group.
+            moreInGroup = false;
             break;
           }
           if (next.type === "action_tam" || next.type === "descriptor" || next.type === "tool" || next.type === "temporal") {
@@ -1270,81 +1378,111 @@ const RecipeVisualBuilder = ({ lang }) => {
           groupType = "SimpleConcept";
           activeRelation = null;
         }
-      } else if (component.type === "descriptor") {
-        let desc = component.value.toLowerCase();
-        const stateDurations = ["golden", "gold", "golde", "brown", "cooked", "boiling", "soft", "soften", "aromatic", "fragrant", "smooth"];
-        const isStateMatch = stateDurations.some(s => desc === s || desc.startsWith(s + "-") || desc.startsWith(s + " "));
-
-        if (isStateMatch && !desc.startsWith("until-")) {
-          desc = "until-" + desc;
+      } else if (component.type === "ingredient") {
+        const ing = { ...component };
+        if (pendingModifiers.length > 0) {
+          ing.modifiers = [...(ing.modifiers || []), ...pendingModifiers];
+          pendingModifiers = [];
         }
-
+        pendingIngsGroup.push(ing);
+      } else if (component.type === "descriptor") {
+        let desc = (component.value || "").toLowerCase().trim();
         let relation = "mod";
-        if (["as-per-taste", "as-per-tastes"].includes(desc)) relation = "krvn";
+
+        // Use auto-relation if set (e.g. from Be verb logic)
+        if (component.autoRelation) {
+          relation = component.autoRelation;
+        }
 
         // 🔥 REFINED STICKY DESCRIPTOR LOGIC:
         const prevComp = currentInstruction[i - 1];
         let attachedToNoun = false;
-        const canStick = !desc.startsWith("until-");
+
+        // Check if explicitly relation was provided via prompt
+        const nextComp = currentInstruction[i + 1];
+        if (nextComp && nextComp.type === "relation") {
+          relation = nextComp.value;
+          // Map long UI strings to codes
+          if (relation.includes("krvn")) relation = "krvn";
+          else if (relation.includes("subject") || relation.includes("k1s")) relation = "k1s";
+          else if (relation.includes("how-कैसे")) relation = "how";
+          i++; // Consume relation component
+        } else {
+          // No explicit relation provided - infer context
+
+          // If we have [Descriptor, Action], assume krvn
+          // But careful not to consume the action here, just reference it
+          if (nextComp && nextComp.type === "action_tam") {
+            relation = "krvn";
+            // If next is Action, we want to attach this descriptor to *that* action.
+            // Currently actionIndex points to *previous* action.
+            // We need to resolve this in the final object or just rely on backend handling order.
+            // For now, we set relation to krvn.
+          }
+        }
+
+        const canStick = true;
 
         if (canStick) {
-          // 1. Check if we follow an ingredient currently in the pending group
-          if (pendingIngsGroup.length > 0 && prevComp.type === "ingredient") {
-            const lastIng = pendingIngsGroup[pendingIngsGroup.length - 1];
-            lastIng.modifiers = lastIng.modifiers || [];
-            lastIng.modifiers.push(desc);
-            attachedToNoun = true;
-          }
-          // 2. Check if we follow a sealed SINGLE noun
-          else {
-            const lastNounRel = instruction.nounRelations[instruction.nounRelations.length - 1];
-            // Only stick to "SimpleConcept" results, and only if we aren't currently building a new group
-            if (lastNounRel && lastNounRel.relationType === "SimpleConcept" && pendingIngsGroup.length === 0) {
-              const nounKey = lastNounRel.noun;
-              if (nounKey) {
-                lastNounRel.nounModifiers[nounKey] = lastNounRel.nounModifiers[nounKey] || [];
-                lastNounRel.nounModifiers[nounKey].push(desc);
-                attachedToNoun = true;
+          const adjLookups = ["small", "large", "big", "tiny", "huge", "medium", "thick", "thin", "heavy", "light", "hot", "cold", "warm", "fresh", "dry", "wet", "clean", "dirty", "old", "new"];
+          const isStickable = stateDurations.some(s => desc.startsWith(s)) || adjLookups.some(a => desc.startsWith(a));
+
+          if (isStickable && relation !== "krvn" && relation !== "k1s") {
+            // Priority 1: Attach to previous ingredient in current group
+            if (pendingIngsGroup.length > 0) {
+              const lastIng = pendingIngsGroup[pendingIngsGroup.length - 1];
+              lastIng.modifiers = [...(lastIng.modifiers || []), desc];
+              attachedToNoun = true;
+            }
+            // Priority 2: Attach to last completed noun (if it was an ingredient)
+            // Removed || prevComp.type === "relation" to prevent stealing descriptors following a relation
+            else if (instruction.nounRelations.length > 0 && prevComp && prevComp.type === "ingredient") {
+              const lastNounRel = instruction.nounRelations[instruction.nounRelations.length - 1];
+              if (lastNounRel && lastNounRel.relationType === "SimpleConcept") {
+                const nounKey = lastNounRel.noun;
+                if (nounKey) {
+                  lastNounRel.nounModifiers[nounKey] = [...(lastNounRel.nounModifiers[nounKey] || []), desc];
+                  attachedToNoun = true;
+                }
               }
+            }
+            // Priority 2b: Attach to last completed tool
+            else if (instruction.tools.length > 0 && prevComp && prevComp.type === "tool") {
+              const lastTool = instruction.tools[instruction.tools.length - 1];
+              lastTool.modifiers = [...(lastTool.modifiers || []), desc];
+              attachedToNoun = true;
+            }
+
+            // Priority 3: Queue for next item (forward-sticking)
+            if (!attachedToNoun) {
+              pendingModifiers.push(desc);
+              attachedToNoun = true;
             }
           }
         }
 
         if (!attachedToNoun) {
-          const nextComp = currentInstruction[i + 1];
-          if (nextComp && nextComp.type === "relation") {
-            relation = nextComp.value;
-            i++;
-          }
+          // Special handling: if relation is krvn and we are effectively modifying the NEXT action
+          // We might need to handle actionIndex differently.
+          // However, current implementation binds to currentActionIndex (last seen).
+          // If the sequence is Desc -> Action, currentActionIndex is previous one.
+          // This is a limitation. But typically backend reconstructs flow.
+          // We will proceed with assigning relation.
+
           instruction.descriptors.push({ value: desc, relation: relation, actionIndex: currentActionIndex });
         }
       } else if (component.type === "temporal") {
         let val = component.durationNumber || component.value;
         let lowerVal = String(val).toLowerCase();
 
-        const stateDurations = ["golden", "gold", "golde", "brown", "cooked", "boiling", "soft", "soften", "aromatic", "fragrant", "smooth"];
-        const isStateMatch = stateDurations.some(s => lowerVal === s || lowerVal.startsWith(s + "-") || lowerVal.startsWith(s + " "));
+        let t_relation = "k7t";
+        if (["immediately", "eventually", "as-per-needed"].includes(lowerVal)) t_relation = "krvn";
+        else if (["soon", "always", "never", "sometimes", "often", "rarely", "frequently"].includes(lowerVal)) t_relation = "freq";
+        else if (component.durationNumber || lowerVal.includes("for-")) t_relation = "dur";
 
-        if (isStateMatch && !lowerVal.startsWith("until-")) {
-          val = "until-" + lowerVal;
-          lowerVal = val.toLowerCase();
-        } else if (lowerVal === "overnight") {
-          val = "for-overnight";
-          lowerVal = val.toLowerCase();
-        } else if (component.durationNumber && !lowerVal.startsWith("for-")) {
-          // Add for- to numeric durations
-          val = "for-" + val;
-          lowerVal = val.toLowerCase();
-        }
-
-        let relation = "k7t";
-        if (["immediately", "eventually", "as-per-needed"].includes(lowerVal)) relation = "krvn";
-        else if (["soon", "always", "never", "sometimes", "often", "rarely", "frequently"].includes(lowerVal)) relation = "freq";
-        else if (component.durationNumber) relation = "dur";
-
-        const nextComp = currentInstruction[i + 1];
-        if (nextComp && nextComp.type === "relation") {
-          relation = nextComp.value;
+        const t_nextComp = currentInstruction[i + 1];
+        if (t_nextComp && t_nextComp.type === "relation") {
+          t_relation = t_nextComp.value;
           i++;
         }
 
@@ -1352,19 +1490,45 @@ const RecipeVisualBuilder = ({ lang }) => {
           value: val,
           unit: component.durationUnit || "",
           display: component.value,
-          relation: relation,
+          relation: t_relation,
           semanticCategory: component.semanticCategory || "",
           morphoSemantic: component.morphoSemantic || "",
           actionIndex: currentActionIndex,
         });
       } else if (component.type === "tool") {
-        instruction.tools.push({
+        let tool_relation = component.relation || "k7p";
+        const tool_nextComp = currentInstruction[i + 1];
+        if (tool_nextComp && tool_nextComp.type === "relation") {
+          tool_relation = tool_nextComp.value;
+          i++; // Consume relation component
+        }
+
+        const toolObj = {
           tool: component.value,
-          relation: component.relation || "",
+          relation: tool_relation,
           relationType: "Tool",
           actionIndex: currentActionIndex,
-        });
+          modifiers: [],
+        };
+        console.log("Processing tool:", component.value, "Pending mods:", pendingModifiers);
+        if (pendingModifiers.length > 0) {
+          toolObj.modifiers = [...pendingModifiers];
+          console.log("Assigned modifiers to tool:", toolObj.modifiers);
+          pendingModifiers = [];
+        }
+        instruction.tools.push(toolObj);
       }
+    }
+
+    if (pendingModifiers.length > 0) {
+      pendingModifiers.forEach((m) => {
+        instruction.descriptors.push({
+          value: m,
+          relation: "mod",
+          actionIndex: currentActionIndex,
+        });
+      });
+      pendingModifiers = [];
     }
 
     if (pendingIngsGroup.length > 0) {
@@ -1405,7 +1569,11 @@ const RecipeVisualBuilder = ({ lang }) => {
 
     const toolPart = instruction.tools.length > 0
       ? instruction.tools
-        .map(t => (t.relation ? `(${t.relation}: ${t.tool})` : t.tool))
+        .map(t => {
+          const mods = (t.modifiers && t.modifiers.length > 0) ? t.modifiers.join(" ") + " " : "";
+          const toolText = mods + t.tool;
+          return t.relation ? `(${t.relation}: ${toolText})` : toolText;
+        })
         .join(" ")
       : "";
 
@@ -1431,7 +1599,10 @@ const RecipeVisualBuilder = ({ lang }) => {
     // 🧠 4) Create fresh graph + USR + external sentences
     await callCreateGraphAPI(recipeId, instruction, sentence);
 
-    // 🔄 5) Reload steps list — now it will contain the updated sentence
+    // ✍️ 5) Set transcript text for display
+    setLastSpokenText(sentence);
+
+    // 🔄 6) Reload steps list — now it will contain the updated sentence
     await loadPastSentences(recipeId);
   };
 
@@ -1483,7 +1654,12 @@ const RecipeVisualBuilder = ({ lang }) => {
         const tableHtml = renderUSRTable(cleanedUsr);
         setUsrTableHtml(tableHtml);
 
-        await sendUSRToExternalService(cleanedUsr, data.graph_id, data.usr_id);
+        await sendUSRToExternalService(cleanedUsr, data.graph_id, data.usr_id, isModifyMode, modifyingSentenceId);
+
+        // Highlight "Add New Instruction" button
+        setShowAddNewPopup(true);
+        setTimeout(() => setShowAddNewPopup(false), 5000);
+
       } else {
         console.error("Graph creation failed:", data.message);
         alert("Graph creation failed: " + data.message);
@@ -1492,6 +1668,59 @@ const RecipeVisualBuilder = ({ lang }) => {
       console.error("Error creating graph:", err);
       alert("Error creating graph. Check console for details.");
     }
+  };
+
+  const downloadText = (filename, text) => {
+    const element = document.createElement("a");
+    const file = new Blob([text], { type: "text/plain" });
+    element.href = URL.createObjectURL(file);
+    element.download = filename;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
+  const handleDownloadStep = async (inst) => {
+    try {
+      const res = await fetch(`${API_URL}/get-instruction-details/${inst.sentence_id}`);
+      const data = await res.json();
+      if (res.ok) {
+        const content = `Sentence: ${inst.text}\n\nUSR Table:\n${data.usr_text}\n`;
+        downloadText(`sentence_${inst.sentence_id}.txt`, content);
+      }
+    } catch (err) {
+      console.error("Download failed:", err);
+    }
+  };
+
+  const handleDownloadAll = async () => {
+    let allContent = "";
+
+    // Past instructions
+    for (let i = 0; i < pastInstructions.length; i++) {
+      const inst = pastInstructions[i];
+      try {
+        const res = await fetch(`${API_URL}/get-instruction-details/${inst.sentence_id}`);
+        const data = await res.json();
+        if (res.ok) {
+          allContent += `Sentence: ${inst.text}\n\nUSR Table:\n${data.usr_text}\n\n${"=".repeat(50)}\n\n`;
+        }
+      } catch (err) { }
+    }
+
+    // Current if any
+    if (englishSentences.length > 0 && selectedSentenceId) {
+      try {
+        const res = await fetch(`${API_URL}/get-instruction-details/${selectedSentenceId}`);
+        const data = await res.json();
+        if (res.ok) {
+          allContent += `Sentence: ${englishSentences[0]}\n\nUSR Table:\n${data.usr_text}\n\n${"=".repeat(50)}\n\n`;
+        }
+      } catch (err) { }
+    }
+
+    if (!allContent) return alert("Nothing to download yet.");
+    downloadText("all_sentences_usr.txt", allContent);
   };
 
 
@@ -1749,7 +1978,7 @@ const RecipeVisualBuilder = ({ lang }) => {
 
   // translate external English sentences to current language
   // 🔹 Send USR + language to backend, but keep returned sentences as-is
-  const sendUSRToExternalService = async (usrText, graphId, usrId) => {
+  const sendUSRToExternalService = async (usrText, graphId, usrId, isModify = false, sentenceId = null) => {
     setLoading(true);
     const recipeId = localStorage.getItem("currentRecipeId");
 
@@ -1768,6 +1997,8 @@ const RecipeVisualBuilder = ({ lang }) => {
       graph_id: graphId,
       usr_id: usrId,
       language: uiLangForAPI,     // 👈 send language
+      modify_sentence_id: sentenceId, // 👈 add modification info
+      is_modify: isModify
     };
 
     try {
@@ -1856,6 +2087,7 @@ const RecipeVisualBuilder = ({ lang }) => {
   };
 
   // ==== ITEM CRUD ====
+  /* ==== ITEM CRUD ==== */
   const addNewIngredient = async (name, emoji) => {
     try {
       const uiLang = normLang || "en";
@@ -1866,6 +2098,40 @@ const RecipeVisualBuilder = ({ lang }) => {
         englishName = englishName.trim().replace(/\s+/g, "-");
       }
 
+      // 1. Check if already exists in loaded ingredients
+      const existing = ingredients.find((it) => it.name.toLowerCase() === englishName.toLowerCase());
+
+      if (existing) {
+        // Check if it is currently visible (in suggestedIngredients)
+        // Normalize suggested names for comparison
+        const isSelected = suggestedIngredients.some(s => s.toLowerCase() === englishName.toLowerCase());
+
+        if (isSelected) {
+          setShowIngredientForm(false);
+          alert("This ingredient is already present and visible in your palette.");
+          return;
+        } else {
+          // It exists but is hidden -> Add to suggestions
+          const newList = [...suggestedIngredients, englishName];
+          setSuggestedIngredients(newList);
+
+          // Persist selection
+          const recipeId = localStorage.getItem("currentRecipeId");
+          if (recipeId) {
+            fetch(`${API_URL}/save-selection`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ recipe_id: recipeId, ingredients: newList })
+            }).catch(err => console.error("Error saving selection:", err));
+          }
+
+          setShowIngredientForm(false);
+          showToast(`Added ${englishName} to your palette.`);
+          return;
+        }
+      }
+
+      // 2. If not exists, create new custom item via API
       const response = await fetch(`${API_URL}/add-custom-item`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1880,14 +2146,7 @@ const RecipeVisualBuilder = ({ lang }) => {
 
       const data = await response.json();
       if (response.ok && data.message) {
-        // Prevent duplicates locally
-        if (ingredients.some((it) => it.name.toLowerCase() === englishName.toLowerCase())) {
-          setShowIngredientForm(false);
-          alert("This ingredient is already present in existing ones");
-          return;
-        }
-
-        // Add new ingredient directly to local state so it appears immediately
+        // Add new ingredient directly to local state
         const newItem = {
           name: englishName,
           emoji,
@@ -2073,8 +2332,62 @@ const RecipeVisualBuilder = ({ lang }) => {
     showToast("Temporal item added successfully");
   };
 
+  const addNewOtherNoun = async (name, emoji) => {
+    try {
+      const uiLang = normLang || "en";
+      let englishName = name.trim().replace(/\s+/g, "-");
+
+      if (uiLang === "hi") {
+        englishName = await translateText(name, "en", "hi");
+        englishName = englishName.trim().replace(/\s+/g, "-");
+      }
+
+      const response = await fetch(`${API_URL}/add-custom-item`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "other",
+          name: englishName,
+          emoji,
+          original: name,
+          lang: uiLang,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.message) {
+        if (otherIngredients.some((i) => i.name.toLowerCase() === englishName.toLowerCase())) {
+          setShowOtherNounForm(false);
+          alert("This item is already present");
+          return;
+        }
+        setOtherIngredients((prev) => [
+          ...prev,
+          {
+            name: englishName,
+            emoji,
+            displayName: uiLang === "en" ? englishName : name,
+          },
+        ]);
+        setShowOtherNounForm(false);
+        showToast("Noun added successfully");
+      } else {
+        alert("Failed to add noun: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error("Error adding noun:", err);
+      alert("Error adding noun. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePastSentenceClick = async (sentenceId) => {
     if (!sentenceId) return;
+    setLastSpokenText(""); // Clear any current voice transcript
+    setGraphImage("");      // Clear current graph
+    setUsrTableHtml("");    // Clear current USR
+    setEnglishSentences([]); // Clear current sentences
     console.debug("Fetching details for sentenceId:", sentenceId);
     try {
       setLoading(true);
@@ -2228,93 +2541,152 @@ const RecipeVisualBuilder = ({ lang }) => {
     return hasActionTam;
   };
 
+  const speakText = (text) => {
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = normLang === "hi" ? "hi-IN" : "en-US";
+      window.speechSynthesis.speak(utterance);
+    } else {
+      alert("Text-to-speech not supported in this browser.");
+    }
+  };
+
+  const [lastSpokenText, setLastSpokenText] = useState("");
+
+  /* ========= DRIVER.JS TOUR ========= */
+  const startTour = () => {
+    const driverObj = driver({
+      showProgress: true,
+      steps: [
+        { element: '.recipe-header-prominent', popover: { title: 'Welcome! 🍳', description: 'This tour will guide you through creating your recipe step-by-step.' } },
+        { element: '.horizontal-palette', popover: { title: 'Ingredient Palette 🎨', description: 'Click on the tabs (Actions, Ingredients, etc.) to browse items.' } },
+        { element: '.filter-controls', popover: { title: 'Search 🔍', description: 'Use the Search Bar in each tab to quickly find specific ingredients or actions.' } },
+        { element: '.section-add-btn', popover: { title: 'Add Custom Item ➕', description: 'Can\'t find an item? Click "Add New" to create a custom ingredient, tool, or action.' } },
+        { element: '.builder-panel', popover: { title: 'Instruction Builder 🛠️', description: 'Drag items here from the palette, or click them to add to your current step.' } },
+        { element: '#btn-guided-voice', popover: { title: 'Guided Voice 🗣️', description: 'Prefer speaking? Use "Guided Voice" for a step-by-step audio assistant.' } },
+        { element: '#btn-generate-instruction', popover: { title: 'Generate ✨', description: 'Once your items are in place, click "Generate Instruction" to process the text.' } },
+        { element: '#btn-add-new-instruction', popover: { title: 'Add New Step 🚀', description: 'Ready for the next step? Click here to start a fresh sentence.' } },
+        { element: '.split-result-area', popover: { title: 'Results View 📊', description: 'Check the generated USR, Graph, and your full Recipe History here.' } },
+        { element: '.submit-dashboard-btn', popover: { title: 'Submit & Finish ✅', description: 'Finished all steps? Click "Submit" to save your complete recipe.' } }
+      ]
+    });
+    driverObj.drive();
+  };
+
+  const handleAudioTranscription = async (text, data) => {
+    // text is the transcribed English sentence
+    // data is the full response from /api/audio/transcribe
+    if (!data) return;
+
+    setLastSpokenText(text);
+    setLoading(true);
+    try {
+      setGraphImage(data.graph_image);
+      setUsrTableHtml(renderUSRTable(data.usr_text));
+
+      // Auto-trigger the English sentence generation and storage
+      await sendUSRToExternalService(data.usr_text, data.graph_id, data.usr_id, isModifyMode, modifyingSentenceId);
+
+      // We show the transcript in the builder, so we clear the chips
+      // but the UI will now show the transcript box
+      setCurrentInstruction([]);
+
+      // Reload steps list so history is updated immediately
+      const recipeId = localStorage.getItem("currentRecipeId");
+      if (recipeId) {
+        await loadPastSentences(recipeId);
+      }
+
+      showToast("Voice instruction processed!");
+    } catch (err) {
+      console.error("Error handling audio transcription:", err);
+      alert("Error adding step via voice.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🛑 GUARD: If no recipe is selected or user not logged in, show minimal loading
+  if (!localStorage.getItem("user_id") || !localStorage.getItem("currentRecipeId")) {
+    return (
+      <div className="recipe-page" style={{ justifyContent: "center", alignItems: "center", height: "80vh" }}>
+        <div className="loader-box">
+          <div className="loader"></div>
+          <p style={{ marginTop: "20px", color: "#64748b", fontWeight: "600" }}>Redirecting you...</p>
+        </div>
+      </div>
+    );
+  }
+
   // ==== RENDER ====
   return (
     <div className="recipe-page">
       <div className="recipe-card">
         {/* PROMINENT DESIGNER HEADER */}
-        <header className="recipe-header-prominent" style={{
-          background: "#f0fdfa",
-          padding: "16px 24px",
-          borderBottom: "1px solid #ccfbf1",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          width: "100%",
-          marginBottom: "10px"
-        }}>
+        <header className="recipe-header-prominent">
           <div className="title-section">
-            <h1 style={{
-              fontSize: "2rem",
-              fontWeight: "800",
-              color: "#065f46",
-              margin: 0,
-              fontFamily: "'Inter', sans-serif",
-              letterSpacing: "-0.02em"
-            }}>
-              {recipeName || "noodles"}
-            </h1>
-            <div className="type-badge" style={{
-              marginTop: "4px",
-              fontSize: "0.85rem",
-              color: "#10b981",
-              fontWeight: "600",
-              display: "flex",
-              alignItems: "center",
-              gap: "12px"
-            }}>
-              <span><span style={{ color: "#065f46" }}>Type:</span> {recipeType || "Breakfast"}</span>
-              <span><span style={{ color: "#065f46" }}>Duration:</span> {recipeDuration || "N/A"} mins</span>
+            <div className="header-title-row">
+              <h1 className="recipe-title">
+                {recipeName || "noodles"}
+              </h1>
+            </div>
+
+            <div className="type-badge">
+              <span><span className="badge-label">Type:</span> {recipeType || "Breakfast"}</span>
+              <span><span className="badge-label">Duration:</span> {recipeDuration || "N/A"} mins</span>
             </div>
           </div>
 
-          <div className="header-actions" style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+          <div className="header-actions">
             <button
               onClick={() => navigate("/page1")}
               className="back-link-btn"
               type="button"
-              style={{
-                padding: "4px 12px",
-                fontSize: "0.75rem",
-                border: "1px solid #e2e8f0",
-                background: "white",
-                color: "#64748b",
-                borderRadius: "4px",
-                display: "flex",
-                alignItems: "center",
-                gap: "4px"
-              }}
             >
               ← {t("goBack")}
             </button>
             <button
-              className="back-link-btn"
+              onClick={startTour}
+              className="tour-start-btn"
               type="button"
-              onClick={() => setShowHowToUse(true)}
-              style={{
-                padding: "4px 12px",
-                fontSize: "0.75rem",
-                background: "#3b82f6",
-                color: "white",
-                borderRadius: "4px",
-                border: "none",
-                display: "flex",
-                alignItems: "center",
-                gap: "4px"
-              }}
+              style={{ padding: "8px 16px", fontSize: "0.85rem", background: "#10b981", color: "white", border: "2px solid #059669", borderRadius: "8px", display: "flex", alignItems: "center", gap: "8px", fontWeight: "700", cursor: "pointer", boxShadow: "0 4px 6px rgba(16, 185, 129, 0.3)" }}
             >
-              📖 How to Use
+              🚀 Take Tour
+            </button>
+            <button
+              onClick={() => setShowHowToUse(true)}
+              className="info-btn"
+              type="button"
+              style={{ padding: "6px 12px", fontSize: "0.7rem", background: "#3b82f6", color: "white", border: "none", borderRadius: "6px" }}
+            >
+              📖 {t("howToUse") || "How to Use"}
             </button>
           </div>
         </header>
+
+
 
         {/* MAIN STACKED WORKSPACE */}
         <div className="workspace-stack">
           {/* 1. HORIZONTAL PALETTE */}
           <div className="horizontal-palette">
+            <div className="mobile-palette-tabs">
+              <button className={paletteTab === "actions" ? "active" : ""} onClick={() => setPaletteTab("actions")}>ACTIONS</button>
+              <button className={paletteTab === "ingredients" ? "active" : ""} onClick={() => setPaletteTab("ingredients")}>INGREDIENTS</button>
+              <button className={paletteTab === "descriptors" ? "active" : ""} onClick={() => setPaletteTab("descriptors")}>DESCRIPTORS</button>
+              <button className={paletteTab === "tools" ? "active" : ""} onClick={() => setPaletteTab("tools")}>TOOLS</button>
+              <button className={paletteTab === "temporal" ? "active" : ""} onClick={() => setPaletteTab("temporal")}>TEMPORAL</button>
+              <button className={paletteTab === "recipes" ? "active" : ""} onClick={() => setPaletteTab("recipes")}>RECIPES</button>
+              <button className={paletteTab === "verbs" ? "active" : ""} onClick={() => setPaletteTab("verbs")}>STATE</button>
+              <button className={paletteTab === "nouns" ? "active" : ""} onClick={() => setPaletteTab("nouns")}>NOUNS</button>
+
+
+            </div>
             <div className="palette-row">
+
               {/* 1. Actions */}
-              <div className="component-section">
+              <div className={`component-section ${paletteTab === 'actions' ? 'mobile-show' : 'mobile-hide'}`}>
+
                 <div className="section-title" style={{ fontSize: "0.62rem" }}>⚡ {t("actionsTitle")}</div>
                 <div className="filter-controls">
                   <input
@@ -2343,17 +2715,21 @@ const RecipeVisualBuilder = ({ lang }) => {
                         />
                         <span className="entity-emoji" style={{ fontSize: "0.8rem" }}>{action.emoji}</span>
                         <span className="entity-name">{action.displayName || action.name}</span>
+                        <span className="palette-item-remove" onClick={(e) => { e.stopPropagation(); removeItem("action", action.name); }}>×</span>
                       </div>
                     ))}
-                  <div className="entity-card add-card" onClick={() => setShowActionForm(true)}>
-                    <span className="entity-emoji">➕</span>
-                    <span className="entity-name">Add</span>
-                  </div>
                 </div>
+                <button className="section-add-btn" onClick={() => setShowActionForm(true)}>
+                  <span className="add-icon">➕</span> Add New Action
+                </button>
+
               </div>
 
+
+
               {/* 2. Ingredients */}
-              <div className="component-section">
+              <div className={`component-section ${paletteTab === 'ingredients' ? 'mobile-show' : 'mobile-hide'}`}>
+
                 <div className="section-title" style={{ fontSize: "0.62rem" }}>🥄 {t("ingredientsTitle")}</div>
                 <div className="filter-controls">
                   <input
@@ -2381,17 +2757,18 @@ const RecipeVisualBuilder = ({ lang }) => {
                         />
                         <span className="entity-emoji" style={{ fontSize: "0.8rem" }}>{ing.emoji}</span>
                         <span className="entity-name">{ing.displayName || ing.name}</span>
+                        <span className="palette-item-remove" onClick={(e) => { e.stopPropagation(); removeItem("ingredient", ing.name); }}>×</span>
                       </div>
                     ))}
-                  <div className="entity-card add-card" onClick={() => setShowIngredientForm(true)}>
-                    <span className="entity-emoji">➕</span>
-                    <span className="entity-name">Add</span>
-                  </div>
                 </div>
+                <button className="section-add-btn" onClick={() => setShowIngredientForm(true)}>
+                  <span className="add-icon">➕</span> Add New Ingredient
+                </button>
               </div>
 
               {/* 3. Descriptors */}
-              <div className="component-section">
+              <div className={`component-section ${paletteTab === 'descriptors' ? 'mobile-show' : 'mobile-hide'}`}>
+
                 <div className="section-title" style={{ fontSize: "0.62rem" }}>📝 {t("descriptorsTitle")}</div>
                 <div className="filter-controls">
                   <input
@@ -2420,17 +2797,18 @@ const RecipeVisualBuilder = ({ lang }) => {
                         />
                         <span className="entity-emoji" style={{ fontSize: "0.8rem" }}>{desc.emoji}</span>
                         <span className="entity-name">{desc.displayName || desc.name}</span>
+                        <span className="palette-item-remove" onClick={(e) => { e.stopPropagation(); removeItem("descriptor", desc.name); }}>×</span>
                       </div>
                     ))}
-                  <div className="entity-card add-card" onClick={() => setShowDescriptorForm(true)}>
-                    <span className="entity-emoji">➕</span>
-                    <span className="entity-name">Add</span>
-                  </div>
                 </div>
+                <button className="section-add-btn" onClick={() => setShowDescriptorForm(true)}>
+                  <span className="add-icon">➕</span> Add New Descriptor
+                </button>
               </div>
 
               {/* 4. Tools */}
-              <div className="component-section">
+              <div className={`component-section ${paletteTab === 'tools' ? 'mobile-show' : 'mobile-hide'}`}>
+
                 <div className="section-title" style={{ fontSize: "0.62rem" }}>🧰 Tools</div>
                 <div className="filter-controls">
                   <input
@@ -2459,139 +2837,209 @@ const RecipeVisualBuilder = ({ lang }) => {
                         />
                         <span className="entity-emoji" style={{ fontSize: "0.8rem" }}>{tool.emoji}</span>
                         <span className="entity-name">{tool.name}</span>
+                        <span className="palette-item-remove" onClick={(e) => { e.stopPropagation(); removeItem("tool", tool.name); }}>×</span>
                       </div>
                     ))}
-                  <div className="entity-card add-card" onClick={() => setShowToolForm(true)}>
-                    <span className="entity-emoji">➕</span>
-                    <span className="entity-name">Add</span>
-                  </div>
                 </div>
+                <button className="section-add-btn" onClick={() => setShowToolForm(true)}>
+                  <span className="add-icon">➕</span> Add New Tool
+                </button>
               </div>
 
-              {/* 5. Temporal */}
-              <div className="component-section">
-                <div className="section-title" style={{ fontSize: "0.62rem" }}>⌛ TEMPORAL CONTEXT</div>
-                <div className="filter-controls">
-                  <input
-                    type="text"
-                    placeholder="Search temporal..."
-                    value={temporalSearch}
-                    onChange={(e) => setTemporalSearch(e.target.value)}
-                    style={{ fontSize: "0.6rem", padding: "2px" }}
-                  />
-                </div>
-                <div className="entity-grid" style={{ height: "220px", display: "flex", flexDirection: "column", gap: "2px", overflowY: "auto" }}>
-                  {/* A. DAY CONDITIONS */}
-                  <div className="temporal-subgroup">
-                    <div
-                      className="sub-heading"
-                      onClick={() => setShowDay(!showDay)}
-                      style={{ fontSize: "0.65rem", padding: "4px", background: "#f8fafc", cursor: "pointer", display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9" }}
-                    >
-                      <span>A. DAY CONDITIONS</span>
-                      <span>{showDay ? "▼" : "▶"}</span>
-                    </div>
-                    {showDay && (
-                      <div className="sub-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", padding: "4px" }}>
-                        {temporalContext.dayConditions.filter(i => i.toLowerCase().includes(temporalSearch.toLowerCase())).map((item, idx) => (
-                          <div key={idx} className="entity-card" onClick={() => toggleItemSelection("temporal", item, "⏱️")} style={{ fontSize: "0.6rem" }}>
-                            {item}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+              {/* 5. Temporal & Other Nouns (Combined) */}
+              <div className={`component-section ${(paletteTab === 'temporal' || paletteTab === 'nouns') ? 'mobile-show' : 'mobile-hide'}`}>
 
-                  {/* B. TIME CONDITIONS */}
-                  <div className="temporal-subgroup">
-                    <div
-                      className="sub-heading"
-                      onClick={() => setShowTime(!showTime)}
-                      style={{ fontSize: "0.65rem", padding: "4px", background: "#f8fafc", cursor: "pointer", display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9" }}
-                    >
-                      <span>B. TIME CONDITIONS</span>
-                      <span>{showTime ? "▼" : "▶"}</span>
-                    </div>
-                    {showTime && (
-                      <div className="sub-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", padding: "4px" }}>
-                        {temporalContext.timeConditions.filter(i => i.toLowerCase().includes(temporalSearch.toLowerCase())).map((item, idx) => (
-                          <div key={idx} className="entity-card" onClick={() => toggleItemSelection("temporal", item, "⏱️")} style={{ fontSize: "0.6rem" }}>
-                            {item}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                {/* TOP HALF: TEMPORAL */}
+                <div style={{ height: "50%", display: "flex", flexDirection: "column", borderBottom: "1px solid #f1f5f9", paddingBottom: "4px" }}>
+                  <div className="section-title" style={{ fontSize: "0.62rem" }}>⌛ TEMPORAL CONTEXT</div>
+                  <div className="filter-controls">
+                    <input
+                      type="text"
+                      placeholder="Search temporal..."
+                      value={temporalSearch}
+                      onChange={(e) => setTemporalSearch(e.target.value)}
+                      style={{ fontSize: "0.6rem", padding: "2px" }}
+                    />
                   </div>
-
-                  {/* C. DURATION CONDITIONS */}
-                  <div className="temporal-subgroup">
-                    <div
-                      className="sub-heading"
-                      onClick={() => setShowDuration(!showDuration)}
-                      style={{ fontSize: "0.65rem", padding: "4px", background: "#f8fafc", cursor: "pointer", display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9" }}
-                    >
-                      <span>C. DURATION CONDITIONS</span>
-                      <span>{showDuration ? "▼" : "▶"}</span>
-                    </div>
-                    {showDuration && (
-                      <div className="sub-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", padding: "4px" }}>
-                        {temporalContext.durationConditions.filter(i => i.toLowerCase().includes(temporalSearch.toLowerCase())).map((item, idx) => (
-                          <div key={idx} className="entity-card" onClick={() => toggleItemSelection("temporal", item, "⏱️")} style={{ fontSize: "0.6rem" }}>
-                            {item}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* 6. Recipe Names */}
-              <div className="component-section">
-                <div className="section-title" style={{ fontSize: "0.62rem" }}>📖 Recipes</div>
-                <div className="filter-controls">
-                  <input
-                    type="text"
-                    placeholder="🔍"
-                    value={recipesSearch}
-                    onChange={(e) => setRecipesSearch(e.target.value)}
-                    style={{ fontSize: "0.6rem", padding: "2px" }}
-                  />
-                </div>
-                <div className="entity-grid" style={{ height: "220px" }}>
-                  <div
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, "ingredient", recipeName, "🍲")}
-                    className="entity-card current-recipe-card"
-                    onClick={() => toggleItemSelection("ingredient", recipeName, "🍲")}
-                  >
-                    <span className="entity-emoji" style={{ fontSize: "0.8rem" }}>🍲</span>
-                    <span className="entity-name">{recipeName}</span>
-                  </div>
-                  {userRecipes
-                    .filter(r => r.recipe_name.toLowerCase().includes(recipesSearch.toLowerCase()))
-                    .map((r, idx) => (
+                  <div className="entity-grid" style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px", overflowY: "auto" }}>
+                    {/* A. DAY CONDITIONS */}
+                    <div className="temporal-subgroup">
                       <div
-                        key={idx}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, "ingredient", r.recipe_name, "📙")}
-                        className="entity-card"
-                        onClick={() => toggleItemSelection("ingredient", r.recipe_name, "📙")}
+                        className="sub-heading"
+                        onClick={() => setShowDay(!showDay)}
+                        style={{ fontSize: "0.65rem", padding: "4px", background: "#f8fafc", cursor: "pointer", display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9" }}
                       >
-                        <span className="entity-emoji" style={{ fontSize: "0.8rem" }}>📙</span>
-                        <span className="entity-name">{r.recipe_name}</span>
+                        <span>A. DAY CONDITIONS</span>
+                        <span>{showDay ? "▼" : "▶"}</span>
                       </div>
-                    ))}
+                      {showDay && (
+                        <div className="sub-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", padding: "4px" }}>
+                          {temporalContext.dayConditions.filter(i => i.toLowerCase().includes(temporalSearch.toLowerCase())).map((item, idx) => (
+                            <div key={idx} className="entity-card" onClick={() => toggleItemSelection("temporal", item, "⏱️")} style={{ fontSize: "0.6rem" }}>
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* B. TIME CONDITIONS */}
+                    <div className="temporal-subgroup">
+                      <div
+                        className="sub-heading"
+                        onClick={() => setShowTime(!showTime)}
+                        style={{ fontSize: "0.65rem", padding: "4px", background: "#f8fafc", cursor: "pointer", display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9" }}
+                      >
+                        <span>B. TIME CONDITIONS</span>
+                        <span>{showTime ? "▼" : "▶"}</span>
+                      </div>
+                      {showTime && (
+                        <div className="sub-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", padding: "4px" }}>
+                          {temporalContext.timeConditions.filter(i => i.toLowerCase().includes(temporalSearch.toLowerCase())).map((item, idx) => (
+                            <div key={idx} className="entity-card" onClick={() => toggleItemSelection("temporal", item, "⏱️")} style={{ fontSize: "0.6rem" }}>
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* C. DURATION CONDITIONS */}
+                    <div className="temporal-subgroup">
+                      <div
+                        className="sub-heading"
+                        onClick={() => setShowDuration(!showDuration)}
+                        style={{ fontSize: "0.65rem", padding: "4px", background: "#f8fafc", cursor: "pointer", display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f1f5f9" }}
+                      >
+                        <span>C. DURATION CONDITIONS</span>
+                        <span>{showDuration ? "▼" : "▶"}</span>
+                      </div>
+                      {showDuration && (
+                        <div className="sub-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", padding: "4px" }}>
+                          {temporalContext.durationConditions.filter(i => i.toLowerCase().includes(temporalSearch.toLowerCase())).map((item, idx) => (
+                            <div key={idx} className="entity-card" onClick={() => toggleItemSelection("temporal", item, "⏱️")} style={{ fontSize: "0.6rem" }}>
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* BOTTOM HALF: OTHER NOUNS */}
+                <div style={{ height: "50%", display: "flex", flexDirection: "column", paddingTop: "4px" }}>
+                  <div className="section-title" style={{ fontSize: "0.62rem" }}>📦 Other Nouns</div>
+                  <div className="filter-controls">
+                    <input
+                      type="text"
+                      placeholder="🔍"
+                      value={ingredientPaletteSearch}
+                      onChange={(e) => setIngredientPaletteSearch(e.target.value)}
+                      style={{ fontSize: "0.6rem", padding: "2px" }}
+                    />
+                  </div>
+                  <div className="entity-grid" style={{ flex: 1, overflowY: "auto" }}>
+                    {otherIngredients
+                      .filter(noun => noun.name.toLowerCase().includes(ingredientPaletteSearch.toLowerCase()))
+                      .map((noun, idx) => (
+                        <div
+                          key={idx}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, "tool", noun.name, noun.emoji)}
+                          className="entity-card"
+                          onClick={() => toggleItemSelection("tool", noun.name, noun.emoji)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={currentInstruction.some(c => c.value === noun.name)}
+                            onChange={(e) => { e.stopPropagation(); toggleItemSelection("tool", noun.name, noun.emoji); }}
+                          />
+                          <span className="entity-emoji" style={{ fontSize: "0.8rem" }}>{noun.emoji}</span>
+                          <span className="entity-name">{noun.displayName || noun.name}</span>
+                          <span className="palette-item-remove" onClick={(e) => { e.stopPropagation(); removeItem("other", noun.name); }}>×</span>
+                        </div>
+                      ))}
+                  </div>
+                  <button className="section-add-btn" onClick={() => setShowOtherNounForm(true)}>
+                    <span className="add-icon">➕</span> Add New Noun
+                  </button>
                 </div>
               </div>
+
+              {/* 6. Recipes & State (Combined) */}
+              <div className={`component-section ${(paletteTab === 'recipes' || paletteTab === 'verbs') ? 'mobile-show' : 'mobile-hide'}`}>
+
+                {/* TOP HALF: RECIPES */}
+                <div style={{ height: "50%", display: "flex", flexDirection: "column", borderBottom: "1px solid #f1f5f9", paddingBottom: "4px" }}>
+                  <div className="section-title" style={{ fontSize: "0.62rem" }}>📖 Recipes</div>
+                  <div className="filter-controls">
+                    <input
+                      type="text"
+                      placeholder="🔍"
+                      value={recipesSearch}
+                      onChange={(e) => setRecipesSearch(e.target.value)}
+                      style={{ fontSize: "0.6rem", padding: "2px" }}
+                    />
+                  </div>
+                  <div className="entity-grid" style={{ flex: 1, overflowY: "auto" }}>
+                    <div
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, "ingredient", recipeName, "🍲")}
+                      className="entity-card current-recipe-card"
+                      onClick={() => toggleItemSelection("ingredient", recipeName, "🍲")}
+                    >
+                      <span className="entity-emoji" style={{ fontSize: "0.8rem" }}>🍲</span>
+                      <span className="entity-name">{recipeName}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* BOTTOM HALF: STATE */}
+                <div style={{ height: "50%", display: "flex", flexDirection: "column", paddingTop: "4px" }}>
+                  <div className="section-title" style={{ fontSize: "0.62rem" }}>🗣️ {t("verbsTitle")}</div>
+                  <div className="entity-grid" style={{ flex: 1, overflowY: "auto" }}>
+                    <div
+                      className="entity-card"
+                      onClick={() => toggleItemSelection("action", "be", "🔵", true)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={currentInstruction.some(c => c.actionName === "be" && c.isBeVerb)}
+                        onChange={(e) => { e.stopPropagation(); toggleItemSelection("action", "be", "🔵", true); }}
+                      />
+                      <span className="entity-emoji" style={{ fontSize: "0.8rem" }}>🔵</span>
+                      <span className="entity-name">be</span>
+                    </div>
+                  </div>
+                  <button className="section-add-btn" onClick={() => setShowActionForm(true)}>
+                    <span className="add-icon">➕</span> Add New State
+                  </button>
+                </div>
+              </div>
+
+              {/* 8. NOUNS (Moved to Temporal) */}
             </div>
           </div>
 
 
           {/* 2. DROP ZONE (Full Width) */}
           <section className="builder-panel panel">
-            <div className="panel-header" style={{ padding: "4px 10px" }}>
+            <div className="panel-header" style={{ padding: "4px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div className="panel-title" style={{ fontSize: "0.65rem", fontWeight: "500" }}>🛠️ {t("instructionBuilderTitle")}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <button
+                  id="btn-guided-voice"
+                  onClick={() => setShowGuidedVoice(true)}
+                  style={{ fontSize: "0.6rem", padding: "4px 8px", borderRadius: "6px", background: "#f1f5f9", border: "1px solid #e2e8f0", cursor: "pointer" }}
+                >
+                  🎧 Guided Voice
+                </button>
+                <AudioInput
+                  onTranscriptionSuccess={(text, data) => handleAudioTranscription(text, data)}
+                  recipeId={localStorage.getItem("currentRecipeId")}
+                />
+              </div>
             </div>
             <div className="panel-scroll" style={{ padding: "6px" }}>
               <div
@@ -2601,51 +3049,100 @@ const RecipeVisualBuilder = ({ lang }) => {
                 onDrop={handleDrop}
                 style={{ padding: "8px", minHeight: "60px", borderRadius: "12px" }}
               >
-                <div className="instruction-builder" style={{ gap: "6px", minHeight: "40px" }}>
-                  {currentInstruction.length === 0 ? (
+                <div className="instruction-builder" style={{ gap: "6px", minHeight: "40px", flexDirection: "column", alignItems: "flex-start" }}>
+                  {currentInstruction.length === 0 && !lastSpokenText ? (
                     <div className="placeholder-text" style={{ fontSize: "0.6rem", padding: "8px", textAlign: "center", width: "100%" }}>
                       {t("placeholderText")}
                     </div>
-                  ) : (
-                    currentInstruction.map((comp, idx) => (
-                      <div key={idx} className={`dropped-chip ${comp.type}`} style={{ padding: "3px 8px", fontSize: "0.62rem", borderRadius: "8px" }}>
-                        <span className="chip-emoji">{comp.emoji}</span>
-                        <span className="chip-text">{comp.actionName || (comp.value && String(comp.value).replace(/-/g, " "))}</span>
-                        {comp.type === "ingredient" && (
-                          <div className="ingredient-meta" style={{ display: "flex", gap: "4px", marginLeft: "4px" }}>
-                            <input
-                              type="text"
-                              className="ingredient-qty-input"
-                              placeholder="Qty"
-                              value={comp.quantity || ""}
-                              onChange={(e) => updateIngredientQuantity(idx, e.target.value)}
-                              style={{ width: "35px", fontSize: "0.6rem", padding: "2px" }}
-                            />
-                            <UnitDropdown
-                              value={comp.measurement || ""}
-                              onSelect={(val) => updateIngredientMeasurement(idx, val)}
-                            />
-                          </div>
-                        )}
-                        <button className="dropped-remove" onClick={() => removeComponent(idx)} style={{ marginLeft: "4px" }}>×</button>
+                  ) : lastSpokenText && currentInstruction.length === 0 ? (
+                    <div className="voice-transcript-box" style={{
+                      width: "100%",
+                      padding: "10px",
+                      background: "#f0f9ff",
+                      border: "1px solid #bae6fd",
+                      borderRadius: "12px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px"
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: "0.65rem", fontWeight: "700", color: "#0369a1" }}>
+                          {currentInstruction.length === 0 && lastSpokenText.includes(" ") ? "📝 Instruction Transcript" : "🎙️ Voice Transcript"}
+                        </span>
+                        <button
+                          onClick={() => setLastSpokenText("")}
+                          style={{ border: "none", background: "none", color: "#0369a1", cursor: "pointer", fontSize: "0.8rem" }}
+                        >
+                          ×
+                        </button>
                       </div>
-                    ))
+                      <div style={{ fontSize: "0.75rem", color: "#0c4a6e", fontWeight: "500", fontStyle: "italic" }}>
+                        <strong>Transcribed Text:</strong> "{lastSpokenText}"
+                      </div>
+                      <div style={{ fontSize: "0.55rem", color: "#64748b" }}>
+                        Transcript processed and added to history.
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      {currentInstruction.map((comp, idx) => (
+                        <div key={idx} className={`dropped-chip ${comp.type}`} style={{ padding: "3px 8px", fontSize: "0.62rem", borderRadius: "8px" }}>
+                          <span className="chip-emoji">{comp.emoji}</span>
+                          <span className="chip-text">{comp.actionName || (comp.value && String(comp.value).replace(/-/g, " "))}</span>
+                          {comp.type === "ingredient" && (
+                            <div className="ingredient-meta" style={{ display: "flex", gap: "4px", marginLeft: "4px" }}>
+                              <input
+                                type="text"
+                                className="ingredient-qty-input"
+                                placeholder="Qty"
+                                value={comp.quantity || ""}
+                                onChange={(e) => updateIngredientQuantity(idx, e.target.value)}
+                                style={{ width: "35px", fontSize: "0.6rem", padding: "2px" }}
+                              />
+                              <UnitDropdown
+                                value={comp.measurement || ""}
+                                onSelect={(val) => updateIngredientMeasurement(idx, val)}
+                              />
+                            </div>
+                          )}
+                          <button className="dropped-remove" onClick={() => removeComponent(idx)} style={{ marginLeft: "4px" }}>×</button>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
-              <div className="builder-toolbar" style={{ display: "flex", justifyContent: "space-between", marginTop: "6px", gap: "10px" }}>
-                <button className="clear-btn" onClick={clearInstruction} style={{ fontSize: "0.6rem", padding: "2px 8px" }}>{t("clearAll")}</button>
-                <div style={{ display: "flex", gap: "8px" }}>
+              <div className="builder-toolbar" style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px", gap: "10px" }}>
+                <div style={{ display: "flex", gap: "12px" }}>
                   {(pastInstructions.length > 0 || englishSentences.length > 0) && (
                     <button
-                      className="generate-btn"
+                      className="generate-btn highlight-pulse"
+                      id="btn-add-new-instruction"
                       onClick={handleAddNewInstruction}
-                      style={{ padding: "4px 12px", fontSize: "0.65rem", borderRadius: "8px", background: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0" }}
+                      style={{
+                        padding: "10px 24px",
+                        fontSize: "0.92rem",
+                        borderRadius: "14px",
+                        background: "#10b981",
+                        color: "white",
+                        border: "2px solid #059669",
+                        fontWeight: "800",
+                        boxShadow: "0 4px 15px rgba(16, 185, 129, 0.4)",
+                        cursor: "pointer",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px"
+                      }}
                     >
-                      ➕ {t("addNewInstruction")}
+                      🚀 {t("addNewInstruction")}
                     </button>
                   )}
-                  <button className="generate-btn" onClick={generateInstruction} disabled={!canGenerate()} style={{ padding: "4px 12px", fontSize: "0.65rem", borderRadius: "8px" }}>
+                  <button
+                    className="generate-btn"
+                    id="btn-generate-instruction"
+                    onClick={generateInstruction}
+                    disabled={!canGenerate()}
+                    style={{ padding: "8px 20px", fontSize: "0.852rem", borderRadius: "12px" }}
+                  >
                     ✨ {t("generateInstruction")}
                   </button>
                 </div>
@@ -2654,13 +3151,32 @@ const RecipeVisualBuilder = ({ lang }) => {
           </section>
 
           {/* 3. SPLIT RESULT AREA (3 boxes) */}
+          < div className="output-view-header mobile-only" >
+            <div className="panel-title" style={{ padding: "10px", fontWeight: "600", fontSize: "1rem" }}>📋 Output View</div>
+          </div >
+          <div className="mobile-output-tabs">
+            <button className={outputTab === "usr" ? "active" : ""} onClick={() => setOutputTab("usr")}>USR</button>
+            <button className={outputTab === "graph" ? "active" : ""} onClick={() => setOutputTab("graph")}>Graph</button>
+            <button className={outputTab === "history" ? "active" : ""} onClick={() => setOutputTab("history")}>History</button>
+          </div>
           <div className="split-result-area">
             {/* Box 1: USR Table */}
-            <section className="panel">
-              <div className="panel-header" style={{ padding: "4px 10px" }}><div className="panel-title" style={{ fontSize: "0.65rem", fontWeight: "500" }}>📋 {t("generatedUSR")}</div></div>
+            <section className={`panel ${outputTab === 'usr' ? 'mobile-show' : 'mobile-hide'}`}>
+
+              <div className="panel-header" style={{ padding: "4px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div className="panel-title" style={{ fontSize: "0.65rem", fontWeight: "500" }}>📋 {t("generatedUSR")}</div>
+              </div>
+
               <div className="panel-scroll" style={{ padding: "0", height: "300px", overflowY: "auto" }}>
                 {usrTableHtml ? (
-                  <div className="compact-usr" style={{ fontSize: "0.6rem" }} dangerouslySetInnerHTML={{ __html: usrTableHtml }} />
+                  <div
+                    onClick={() => setShowUSRModal(true)}
+                    style={{ cursor: "zoom-in", paddingBottom: "10px" }}
+                    title="Click to enlarge USR Table"
+                  >
+                    <div className="compact-usr" style={{ fontSize: "0.6rem" }} dangerouslySetInnerHTML={{ __html: usrTableHtml }} />
+                    <div style={{ fontSize: "0.55rem", color: "#64748b", marginTop: "4px", textAlign: "center" }}>Click to enlarge (🔍)</div>
+                  </div>
                 ) : (
                   <div style={{ fontSize: "0.6rem", color: "#94a3b8", padding: "40px", textAlign: "center" }}>USR Table will appear here</div>
                 )}
@@ -2668,11 +3184,22 @@ const RecipeVisualBuilder = ({ lang }) => {
             </section>
 
             {/* Box 2: Graph */}
-            <section className="panel">
+            <section className={`panel ${outputTab === 'graph' ? 'mobile-show' : 'mobile-hide'}`}>
+
               <div className="panel-header" style={{ padding: "4px 10px" }}><div className="panel-title" style={{ fontSize: "0.65rem", fontWeight: "500" }}>📊 {t("generatedGraph")}</div></div>
-              <div className="panel-scroll" style={{ padding: "6px", textAlign: "center" }}>
+              <div className="panel-scroll" style={{ padding: "10px", textAlign: "center", display: "flex", justifyContent: "center", alignItems: "center", height: "300px" }}>
                 {graphImage ? (
-                  <img src={graphImage} alt="Graph" style={{ width: "100%", borderRadius: "4px", cursor: "pointer" }} onClick={() => setShowGraphModal(true)} />
+                  <div style={{ padding: "10px", background: "#f8fafc", borderRadius: "12px", border: "1px dashed #cbd5e0", display: "inline-block", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}>
+                    <img
+                      src={graphImage}
+                      alt="Graph"
+                      style={{ maxWidth: "160px", maxHeight: "240px", borderRadius: "8px", cursor: "pointer", transition: "transform 0.2s" }}
+                      onClick={() => setShowGraphModal(true)}
+                      onMouseOver={(e) => e.target.style.transform = "scale(1.02)"}
+                      onMouseOut={(e) => e.target.style.transform = "scale(1)"}
+                    />
+                    <div style={{ fontSize: "0.55rem", color: "#64748b", marginTop: "6px" }}>Click to enlarge</div>
+                  </div>
                 ) : (
                   <div style={{ fontSize: "0.6rem", color: "#94a3b8", padding: "40px 0" }}>Graph will appear here</div>
                 )}
@@ -2680,26 +3207,60 @@ const RecipeVisualBuilder = ({ lang }) => {
             </section>
 
             {/* Box 3: History & Sentences */}
-            <section className="panel">
-              <div className="panel-header" style={{ padding: "4px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div className="panel-title" style={{ fontSize: "0.65rem", fontWeight: "500" }}>📜 {t("stepsForRecipe")}</div>
-                {englishSentences.length > 0 && (
-                  <button className="generate-btn" onClick={handleAddNewInstruction} style={{ padding: "2px 6px", fontSize: "0.6rem", background: "#22c55e", borderRadius: "4px" }}>
-                    ➕ {t("addNewInstruction")}
-                  </button>
+            <section className={`panel ${outputTab === 'history' ? 'mobile-show' : 'mobile-hide'}`}>
+
+              <div className="panel-header" style={{ padding: "4px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative" }}>
+                <div className="panel-title" style={{ fontSize: "0.8rem", fontWeight: "600" }}>📜 {t("stepsForRecipe")}</div>
+                {(englishSentences.length > 0 || pastInstructions.length > 0) && (
+                  <div style={{ color: "#22c55e", fontSize: "0.7rem", fontWeight: "600" }}>Steps</div>
+                )}
+                {showAddNewPopup && (
+                  <div style={{
+                    position: "absolute",
+                    top: "-45px",
+                    right: "0",
+                    background: "#166534",
+                    color: "white",
+                    padding: "6px 12px",
+                    borderRadius: "8px",
+                    fontSize: "0.65rem",
+                    fontWeight: "600",
+                    boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
+                    animation: "fadeInUp 0.3s ease",
+                    zIndex: 10
+                  }}>
+                    Click here to generate a new sentence!
+                  </div>
                 )}
               </div>
               <div className="panel-scroll" style={{ padding: "6px", height: "300px", overflowY: "auto" }}>
                 {/* Generated Sentences */}
                 {englishSentences.length > 0 && (
-                  <div className="panel-card" style={{ marginBottom: "8px", padding: "6px", background: "#f0fdf4", border: "1px solid #dcfce7" }}>
-                    <div style={{ fontSize: "0.62rem", color: "#166534", marginBottom: "4px" }}>Current Result:</div>
+                  <div className="panel-card" style={{ marginBottom: "8px", padding: "8px", background: "#f0fdf4", border: "1px solid #dcfce7", borderRadius: "10px" }}>
+                    {lastSpokenText && (
+                      <div style={{ fontSize: "0.65rem", color: "#64748b", marginBottom: "6px", borderBottom: "1px solid #dcfce7", pb: "4px" }}>
+                        {lastSpokenText.includes(" ") && !currentInstruction.some(c => c.value === lastSpokenText) ? "📝" : "🗣️"}
+                        <strong> {lastSpokenText.includes(" ") ? "Instruction:" : "You said:"}</strong> "{lastSpokenText}"
+                      </div>
+                    )}
+                    <div style={{ fontSize: "0.62rem", color: "#166534", marginBottom: "4px", fontWeight: "700" }}>✨ Generated Result:</div>
                     <ul style={{ paddingLeft: "12px", margin: 0 }}>
                       {englishSentences.map((s, idx) => (
-                        <li key={idx} style={{ fontSize: "0.62rem", marginBottom: "2px", cursor: "pointer" }} onClick={() => handlePastSentenceClick(selectedSentenceId)}>
+                        <li key={idx}
+                          style={{ fontSize: "0.62rem", marginBottom: "2px", cursor: "pointer" }}
+                          onClick={() => handlePastSentenceClick(selectedSentenceId)}
+                          onDoubleClick={() => {
+                            setLastSpokenText(s);
+                            setCurrentInstruction([]);
+                            showToast("Loaded into builder");
+                          }}
+                        >
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <span>{s}</span>
-                            <button onClick={() => removeSentence(s)} style={{ color: "#ef4444", border: "none", background: "none", cursor: "pointer", padding: "0 4px" }}>×</button>
+                            <div style={{ display: "flex", gap: "4px" }}>
+                              <button onClick={() => speakText(s)} title="Speak" style={{ border: "none", background: "none", cursor: "pointer", fontSize: "0.7rem" }}>🔊</button>
+                              <button onClick={() => removeSentence(s)} style={{ color: "#ef4444", border: "none", background: "none", cursor: "pointer", padding: "0 4px" }}>×</button>
+                            </div>
                           </div>
                         </li>
                       ))}
@@ -2711,11 +3272,26 @@ const RecipeVisualBuilder = ({ lang }) => {
                   {pastInstructions.length > 0 ? (
                     pastInstructions.map((inst, index) => (
                       <div key={index} className="generated-step"
-                        style={{ padding: "4px 0", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer" }}
+                        style={{ padding: "6px 0", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
                         onClick={() => handlePastSentenceClick(inst.sentence_id)}
+                        onDoubleClick={() => {
+                          setLastSpokenText(inst.text);
+                          setCurrentInstruction([]);
+                          showToast("Loaded into builder");
+                        }}
                       >
-                        <span style={{ fontSize: "0.62rem", flex: 1 }}><strong>#{index + 1}:</strong> {inst.text}</span>
-                        <button onClick={(e) => { e.stopPropagation(); removeGeneratedStep(index); }} style={{ border: "none", background: "none", color: "#94a3b8", cursor: "pointer", fontSize: "0.7rem", padding: "0 4px" }}>×</button>
+                        <span style={{ fontSize: "0.62rem", flex: 1, paddingRight: "8px" }}><strong>#{index + 1}:</strong> {inst.text}</span>
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          <button onClick={(e) => { e.stopPropagation(); speakText(inst.text); }} title="Speak" style={{ border: "none", background: "none", cursor: "pointer", fontSize: "0.7rem" }}>🔊</button>
+                          <button
+                            title="Download USR"
+                            onClick={(e) => { e.stopPropagation(); handleDownloadStep(inst); }}
+                            style={{ border: "none", background: "#f8fafc", color: "#64748b", cursor: "pointer", fontSize: "0.6rem", padding: "2px 4px", borderRadius: "4px" }}
+                          >
+                            ⬇️
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); removeGeneratedStep(index); }} style={{ border: "none", background: "none", color: "#ef4444", cursor: "pointer", fontSize: "0.8rem", padding: "0 4px" }}>×</button>
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -2736,323 +3312,473 @@ const RecipeVisualBuilder = ({ lang }) => {
               </div>
             </section>
           </div>
-        </div>
+        </div >
 
         {/* Loader */}
-        {loading && (
-          <div
-            id="loader"
-            style={{
-              display: "flex",
-              position: "fixed",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              background: "rgba(255,255,255,0.8)",
-              zIndex: 9999,
-              justifyContent: "center",
-              alignItems: "center",
-              textAlign: "center",
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  border: "6px solid #f3f3f3",
-                  borderTop: "6px solid #22c55e",
-                  borderRadius: "50%",
-                  width: "60px",
-                  height: "60px",
-                  animation: "spin 1s linear infinite",
-                  margin: "auto",
-                }}
-              />
-              <p style={{ fontWeight: 600, marginTop: "10px" }}>
-                Generating sentence… please wait
-              </p>
+        {
+          loading && (
+            <div
+              id="loader"
+              style={{
+                display: "flex",
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                background: "rgba(255,255,255,0.8)",
+                zIndex: 9999,
+                justifyContent: "center",
+                alignItems: "center",
+                textAlign: "center",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    border: "6px solid #f3f3f3",
+                    borderTop: "6px solid #22c55e",
+                    borderRadius: "50%",
+                    width: "60px",
+                    height: "60px",
+                    animation: "spin 1s linear infinite",
+                    margin: "auto",
+                  }}
+                />
+                <p style={{ fontWeight: 600, marginTop: "10px" }}>
+                  Generating sentence… please wait
+                </p>
+              </div>
             </div>
-          </div>
-        )}
+          )
+        }
 
         {/* Submit Modal */}
-        {showModal && (
-          <div className="modal-overlay" onClick={() => setShowModal(false)}>
-            <div
-              className="modal-content"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="modal-header">
-                <h5 className="modal-title">{t("finalCheckTitle")}</h5>
-                <button
-                  type="button"
-                  className="close"
-                  onClick={() => setShowModal(false)}
-                >
-                  <span>&times;</span>
-                </button>
-              </div>
-              <div className="modal-body">
-                <h1>{t("finalCheckBody")}</h1>
-              </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowModal(false)}
-                >
-                  {t("backToEdit")}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => navigate("/page3")}
-                >
-                  {t("continueToSubmit")}
-                </button>
+        {
+          showModal && (
+            <div className="modal-overlay" onClick={() => setShowModal(false)}>
+              <div
+                className="modal-content"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="modal-header">
+                  <h5 className="modal-title">{t("finalCheckTitle")}</h5>
+                  <button
+                    type="button"
+                    className="close"
+                    onClick={() => setShowModal(false)}
+                  >
+                    <span>&times;</span>
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <h1>{t("finalCheckBody")}</h1>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowModal(false)}
+                  >
+                    {t("backToEdit")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => navigate("/page3")}
+                  >
+                    {t("continueToSubmit")}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        }
 
         {/* Graph Zoom Modal */}
-        {showGraphModal && graphImage && (
-          <div className="modal-overlay" onClick={() => setShowGraphModal(false)}>
-            <div className="graph-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header" style={{ marginBottom: "6px" }}>
-                <h5 className="modal-title">{t("generatedGraph")} (Full View)</h5>
-                <button
-                  type="button"
-                  className="close"
-                  onClick={() => setShowGraphModal(false)}
-                >
-                  <span>&times;</span>
-                </button>
+        {
+          showGraphModal && graphImage && (
+            <div className="modal-overlay" onClick={() => setShowGraphModal(false)}>
+              <div className="graph-modal" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header" style={{ marginBottom: "6px" }}>
+                  <h5 className="modal-title">{t("generatedGraph")} (Full View)</h5>
+                  <button
+                    type="button"
+                    className="close"
+                    onClick={() => setShowGraphModal(false)}
+                  >
+                    <span>&times;</span>
+                  </button>
+                </div>
+                <img src={graphImage} alt="Graph large" />
               </div>
-              <img src={graphImage} alt="Graph large" />
             </div>
-          </div>
-        )}
+          )
+        }
+
+        {/* USR Table Zoom Modal */}
+        {
+          showUSRModal && usrTableHtml && (
+            <div className="modal-overlay" onClick={() => setShowUSRModal(false)}>
+              <div className="usr-modal" onClick={(e) => e.stopPropagation()} style={{
+                background: "white",
+                borderRadius: "12px",
+                padding: "20px",
+                maxWidth: "90vw",
+                maxHeight: "90vh",
+                overflow: "auto",
+                boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)"
+              }}>
+                <div className="modal-header" style={{ marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h5 className="modal-title" style={{ fontSize: "1.2rem", fontWeight: "700", color: "#065f46" }}>📋 {t("generatedUSR")} (Full View)</h5>
+                  <button
+                    type="button"
+                    className="close"
+                    onClick={() => setShowUSRModal(false)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      fontSize: "1.5rem",
+                      cursor: "pointer",
+                      color: "#64748b"
+                    }}
+                  >
+                    <span>&times;</span>
+                  </button>
+                </div>
+                <div dangerouslySetInnerHTML={{ __html: usrTableHtml }} style={{ fontSize: "1rem" }} />
+              </div>
+            </div>
+          )
+        }
+
+
 
         {/* POPUPS */}
-        {showSemanticPopup && (
-          <SemanticPopup
-            onConfirm={confirmSemanticCategory}
-            onSkip={skipSemanticCategory}
-            onCancel={() => setShowSemanticPopup(false)}
-            semanticOptions={semanticOptions}
-            morphoOptions={morphoOptions}
-          />
-        )}
+        {
+          showSemanticPopup && (
+            <SemanticPopup
+              onConfirm={confirmSemanticCategory}
+              onSkip={skipSemanticCategory}
+              onCancel={() => setShowSemanticPopup(false)}
+              semanticOptions={semanticOptions}
+              morphoOptions={morphoOptions}
+            />
+          )
+        }
 
-        {showTemporalSemanticPopup && (
-          <SemanticPopup
-            onConfirm={confirmTemporalSemanticCategory}
-            onSkip={skipTemporalSemanticCategory}
-            onCancel={() => setShowTemporalSemanticPopup(false)}
-            semanticOptions={semanticOptions}
-            morphoOptions={morphoOptions}
-          />
-        )}
+        {
+          showTemporalSemanticPopup && (
+            <SemanticPopup
+              onConfirm={confirmTemporalSemanticCategory}
+              onSkip={skipTemporalSemanticCategory}
+              onCancel={() => setShowTemporalSemanticPopup(false)}
+              semanticOptions={semanticOptions}
+              morphoOptions={morphoOptions}
+            />
+          )
+        }
 
-        {showTAMSelector && (
-          <TAMSelector
-            tams={tams}
-            onConfirm={confirmTAM}
-            onCancel={() => setShowTAMSelector(false)}
-          />
-        )}
+        {
+          showTAMSelector && (
+            <TAMSelector
+              tams={tams}
+              onConfirm={confirmTAM}
+              onCancel={() => setShowTAMSelector(false)}
+            />
+          )
+        }
 
-        {showDurationPopup && (
-          <div className="popup-overlay" onClick={() => setShowDurationPopup(false)}>
-            <div className="popup-box" onClick={(e) => e.stopPropagation()}>
-              <h3>Enter Duration</h3>
+        {
+          showDurationPopup && (
+            <div className="popup-overlay" onClick={() => setShowDurationPopup(false)}>
+              <div className="popup-box" onClick={(e) => e.stopPropagation()}>
+                <h3>Enter Duration</h3>
 
-              <input
-                type="text"
-                placeholder="e.g. 3-5"
-                value={durationNumberInput}
-                onChange={(e) => setDurationNumberInput(e.target.value)}
-              />
+                <input
+                  type="text"
+                  placeholder="e.g. 3-5"
+                  value={durationNumberInput}
+                  onChange={(e) => setDurationNumberInput(e.target.value)}
+                />
 
-              <select
-                value={durationUnitInput}
-                onChange={(e) => setDurationUnitInput(e.target.value)}
-              >
-                <option value="minutes">minutes</option>
-                <option value="hours">hours</option>
-              </select>
+                <select
+                  value={durationUnitInput}
+                  onChange={(e) => setDurationUnitInput(e.target.value)}
+                >
+                  <option value="minutes">minutes</option>
+                  <option value="hours">hours</option>
+                </select>
 
-              <button
-                onClick={() => {
-                  const num = durationNumberInput.trim();
-                  if (!num) return alert("Enter duration (e.g. 5 or 3-5)");
+                <button
+                  onClick={() => {
+                    const num = durationNumberInput.trim();
+                    if (!num) return alert("Enter duration (e.g. 5 or 3-5)");
 
-                  const comp = {
-                    type: "temporal",
-                    value: `${num} ${durationUnitInput}`,
-                    durationNumber: num,
-                    durationUnit: durationUnitInput,
-                    emoji: "⏱️",
-                  };
+                    const comp = {
+                      type: "temporal",
+                      value: `${num} ${durationUnitInput}`,
+                      durationNumber: num,
+                      durationUnit: durationUnitInput,
+                      emoji: "⏱️",
+                    };
 
-                  setCurrentInstruction((prev) => [...prev, comp]);
-                  setShowDurationPopup(false);
-                  setDurationNumberInput("");
-                  setShowRelationPrompt(true);
-                }}
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        )}
-
-
-
-        {showRelationPrompt && (
-          <RelationPrompt
-            onConfirm={confirmRelation}
-            onSkip={() => setShowRelationPrompt(false)}
-            type={currentInstruction[currentInstruction.length - 1]?.type}
-            currentItem={currentInstruction[currentInstruction.length - 1]}
-          />
-        )}
-
-        {showIngredientForm && (
-          <AddItemForm
-            title="Add New Ingredient"
-            onAdd={addNewIngredient}
-            onCancel={() => setShowIngredientForm(false)}
-          />
-        )}
-
-        {showActionForm && (
-          <AddItemForm
-            title="Add New Action"
-            onAdd={addNewAction}
-            onCancel={() => setShowActionForm(false)}
-          />
-        )}
-
-        {showDescriptorForm && (
-          <AddItemForm
-            title="Add New Descriptor"
-            onAdd={addNewDescriptor}
-            onCancel={() => setShowDescriptorForm(false)}
-          />
-        )}
-
-        {showToolForm && (
-          <AddItemForm
-            title="Add New Tool"
-            onAdd={addNewTool}
-            onCancel={() => setShowToolForm(false)}
-          />
-        )}
-
-        {showTemporalForm && (
-          <AddItemForm
-            title="Add New Temporal Item"
-            onAdd={addNewTemporal}
-            onCancel={() => setShowTemporalForm(false)}
-          />
-        )}
-
-        {showHowToUse && (
-          <div className="modal-overlay" onClick={() => setShowHowToUse(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "600px" }}>
-              <div className="modal-header">
-                <h5 className="modal-title">📖 How to Use Recipe Generator</h5>
-                <button type="button" className="close" onClick={() => setShowHowToUse(false)}>
-                  <span>&times;</span>
+                    setCurrentInstruction((prev) => [...prev, comp]);
+                    setShowDurationPopup(false);
+                    setDurationNumberInput("");
+                    setShowRelationPrompt(true);
+                  }}
+                >
+                  Confirm
                 </button>
               </div>
-              <div className="modal-body" style={{ textAlign: "left" }}>
-                <ol>
-                  <li><strong>Select Action:</strong> Click an action (e.g., 🔪 Cut) from the palette to add it. Then select the appropriate TAM (Tense-Aspect-Modality).</li>
-                  <li><strong>Add Ingredients:</strong> Click ingredients to add them. If you add more than one, you'll be asked how to connect them (e.g., "and" / "or").</li>
-                  <li><strong>Compound Words:</strong> If an ingredient has multiple words (e.g., Black Pepper), use a hyphen: <code>black-pepper</code>. The system handles this automatically!</li>
-                  <li><strong>Generate:</strong> Click "Generate Sentence" to see the result, USR, and Graph.</li>
-                  <li><strong>Add New:</strong> Click "Add New Sentence" to start the next step.</li>
-                  <li><strong>Combine Steps:</strong> Once you have at least <strong>two steps</strong>, click "Next: Sentence Relations" to combine them into a story.</li>
-                </ol>
-              </div>
-              <div className="modal-footer">
-                <button className="btn btn-primary" onClick={() => setShowHowToUse(false)}>Got it!</button>
+            </div>
+          )
+        }
+
+
+
+        {
+          showRelationPrompt && (
+            <RelationPrompt
+              onConfirm={confirmRelation}
+              onSkip={() => setShowRelationPrompt(false)}
+              type={currentInstruction[currentInstruction.length - 1]?.type}
+              currentItem={currentInstruction[currentInstruction.length - 1]}
+            />
+          )
+        }
+
+        {
+          showIngredientForm && (
+            <AddItemForm
+              title="Add New Ingredient"
+              onAdd={addNewIngredient}
+              onCancel={() => setShowIngredientForm(false)}
+            />
+          )
+        }
+
+        {
+          showActionForm && (
+            <AddItemForm
+              title="Add New Action"
+              onAdd={addNewAction}
+              onCancel={() => setShowActionForm(false)}
+            />
+          )
+        }
+
+        {
+          showDescriptorForm && (
+            <AddItemForm
+              title="Add New Descriptor"
+              onAdd={addNewDescriptor}
+              onCancel={() => setShowDescriptorForm(false)}
+            />
+          )
+        }
+
+        {
+          showToolForm && (
+            <AddItemForm
+              title="Add New Tool"
+              onAdd={addNewTool}
+              onCancel={() => setShowToolForm(false)}
+            />
+          )
+        }
+
+        {
+          showTemporalForm && (
+            <AddItemForm
+              title="Add New Temporal Item"
+              onAdd={addNewTemporal}
+              onCancel={() => setShowTemporalForm(false)}
+            />
+          )
+        }
+
+        {
+          showOtherNounForm && (
+            <AddItemForm
+              title="Add New Noun"
+              onAdd={addNewOtherNoun}
+              onCancel={() => setShowOtherNounForm(false)}
+            />
+          )
+        }
+
+        {
+          showHowToUse && (
+            <div className="modal-overlay" onClick={() => setShowHowToUse(false)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "600px" }}>
+                <div className="modal-header">
+                  <h5 className="modal-title">📖 How to Use Recipe Generator</h5>
+                  <button type="button" className="close" onClick={() => setShowHowToUse(false)}>
+                    <span>&times;</span>
+                  </button>
+                </div>
+                <div className="modal-body" style={{ textAlign: "left" }}>
+                  <ol>
+                    <li><strong>Select Action:</strong> Click an action (e.g., 🔪 Cut) from the palette to add it. Then select the appropriate TAM (Tense-Aspect-Modality).</li>
+                    <li><strong>Add Ingredients:</strong> Click ingredients to add them. If you add more than one, you'll be asked how to connect them (e.g., "and" / "or").</li>
+                    <li><strong>Compound Words:</strong> If an ingredient has multiple words (e.g., Black Pepper), use a hyphen: <code>black-pepper</code>. The system handles this automatically!</li>
+                    <li><strong>Generate:</strong> Click "Generate Sentence" to see the result, USR, and Graph.</li>
+                    <li><strong>Voice Assistance:</strong> Click the 🎙️ icon to speak an instruction (e.g., "Heat the oil"). You can also use 🎧 <strong>Guided Voice</strong> for a step-by-step recording assistant.</li>
+                    <li><strong>Add New:</strong> Click "Add New Sentence" to start the next step.</li>
+                    <li><strong>Combine Steps:</strong> Once you have at least <strong>two steps</strong>, click "Next: Sentence Relations" to combine them into a story.</li>
+                  </ol>
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-primary" onClick={() => setShowHowToUse(false)}>Got it!</button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        }
 
-        {showConnectionPrompt && (
-          <div className="modal-overlay" onClick={() => { setShowConnectionPrompt(false); setPendingIngredientForConnection(null); }}>
-            <div className="popup-box" onClick={(e) => e.stopPropagation()} style={{ padding: "24px", minWidth: "300px", background: "white", borderRadius: "16px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}>
-              <h3 style={{ marginBottom: "16px", color: "#10b981", fontSize: "1.2rem", fontWeight: "800" }}>🔗 Connect Ingredients</h3>
-              <p style={{ marginBottom: "24px", fontSize: "0.95rem", color: "#475569" }}>
-                How should <strong>{pendingIngredientForConnection?.value}</strong> be connected to the previous ingredient?
-              </p>
-              <div className="popup-buttons" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+        {
+          showGuidedVoice && (
+            <GuidedAudioInput
+              recipeId={localStorage.getItem("currentRecipeId")}
+              onCancel={() => setShowGuidedVoice(false)}
+              onComplete={async (sentence) => {
+                setShowGuidedVoice(false);
+                // We send the sentence to the same handleAudioTranscription logic
+                // But we first need to get the transcription data for it.
+                // Actually, let's just send it to a new backend endpoint
+                // that processes text just like audio_transcribe does.
+                setLoading(true);
+                try {
+                  const res = await fetch(`${API_URL}/api/audio/process-text`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: sentence, recipe_id: localStorage.getItem("currentRecipeId") })
+                  });
+                  const data = await res.json();
+                  if (data.usr_text) {
+                    handleAudioTranscription(sentence, data);
+                  }
+                } catch (err) {
+                  console.error("Error processing guided sentence:", err);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            />
+          )
+        }
+
+        {
+          showConnectionPrompt && (
+            <div className="modal-overlay" onClick={() => { setShowConnectionPrompt(false); setPendingIngredientForConnection(null); }}>
+              <div className="popup-box" onClick={(e) => e.stopPropagation()} style={{ padding: "24px", minWidth: "300px", background: "white", borderRadius: "16px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}>
+                <h3 style={{ marginBottom: "16px", color: "#10b981", fontSize: "1.2rem", fontWeight: "800" }}>🔗 Connect Ingredients</h3>
+                <p style={{ marginBottom: "24px", fontSize: "0.95rem", color: "#475569" }}>
+                  How should <strong>{pendingIngredientForConnection?.value}</strong> be connected to the previous ingredient?
+                </p>
+                <div className="popup-buttons" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+                  <button
+                    className="btn btn-primary"
+                    style={{ padding: "12px", background: "#10b981", border: "none", color: "white", borderRadius: "12px", fontWeight: "600" }}
+                    onClick={() => {
+                      const connection = { type: "connection", value: "and", emoji: "🔗" };
+                      setCurrentInstruction(prev => [...prev, connection]);
+
+                      // Find the previous relation to reuse
+                      const lastRel = [...currentInstruction].reverse().find(c => c.type === "relation");
+
+                      if (lastRel) {
+                        // ✅ Automatically apply the previous relation without asking again
+                        const ingredientWithRelation = {
+                          ...pendingIngredientForConnection,
+                          quantity: "",
+                          measurement: "",
+                        };
+
+                        setCurrentInstruction(prev => [...prev, ingredientWithRelation]);
+
+                        // Auto-apply the previous relation
+                        const relationComponent = {
+                          type: "relation",
+                          value: lastRel.value,
+                          emoji: "🔗",
+                        };
+                        setCurrentInstruction(prev => [...prev, relationComponent]);
+
+                        setShowConnectionPrompt(false);
+                        setPendingIngredientForConnection(null);
+                      } else {
+                        // No previous relation found, ask for semantics
+                        setPendingIngredient(pendingIngredientForConnection);
+                        setShowSemanticPopup(true);
+                        setShowConnectionPrompt(false);
+                        setPendingIngredientForConnection(null);
+                      }
+                    }}
+                  >
+                    AND (और)
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    style={{ padding: "12px", background: "#10b981", border: "none", color: "white", borderRadius: "12px", fontWeight: "600" }}
+                    onClick={() => {
+                      const connection = { type: "connection", value: "or", emoji: "🔗" };
+                      setCurrentInstruction(prev => [...prev, connection]);
+
+                      // Find the previous relation to reuse
+                      const lastRel = [...currentInstruction].reverse().find(c => c.type === "relation");
+
+                      if (lastRel) {
+                        // ✅ Automatically apply the previous relation without asking again
+                        const ingredientWithRelation = {
+                          ...pendingIngredientForConnection,
+                          quantity: "",
+                          measurement: "",
+                        };
+
+                        setCurrentInstruction(prev => [...prev, ingredientWithRelation]);
+
+                        // Auto-apply the previous relation
+                        const relationComponent = {
+                          type: "relation",
+                          value: lastRel.value,
+                          emoji: "🔗",
+                        };
+                        setCurrentInstruction(prev => [...prev, relationComponent]);
+
+                        setShowConnectionPrompt(false);
+                        setPendingIngredientForConnection(null);
+                      } else {
+                        // No previous relation found, ask for semantics
+                        setPendingIngredient(pendingIngredientForConnection);
+                        setShowSemanticPopup(true);
+                        setShowConnectionPrompt(false);
+                        setPendingIngredientForConnection(null);
+                      }
+                    }}
+                  >
+                    OR (या)
+                  </button>
+                </div>
                 <button
-                  className="btn btn-primary"
-                  style={{ padding: "12px", background: "#10b981", border: "none", color: "white", borderRadius: "12px", fontWeight: "600" }}
+                  className="btn btn-secondary"
+                  style={{ width: "100%", padding: "12px", background: "#f1f5f9", border: "1px solid #e2e8f0", color: "#64748b", borderRadius: "12px", fontSize: "0.9rem" }}
                   onClick={() => {
-                    const connection = { type: "connection", value: "and", emoji: "🔗" };
-                    setCurrentInstruction(prev => [...prev, connection]);
                     setPendingIngredient(pendingIngredientForConnection);
                     setShowConnectionPrompt(false);
-
-                    // Handle relation logic for second-time ingredient selections: 
-                    // Reuse the previous relation if available
-                    const lastRel = [...currentInstruction].reverse().find(c => c.type === "relation");
-                    if (lastRel) {
-                      setInherentRelation(lastRel.value);
-                    }
-
                     setShowSemanticPopup(true);
                     setPendingIngredientForConnection(null);
                   }}
                 >
-                  AND (और)
-                </button>
-                <button
-                  className="btn btn-primary"
-                  style={{ padding: "12px", background: "#10b981", border: "none", color: "white", borderRadius: "12px", fontWeight: "600" }}
-                  onClick={() => {
-                    const connection = { type: "connection", value: "or", emoji: "🔗" };
-                    setCurrentInstruction(prev => [...prev, connection]);
-                    setPendingIngredient(pendingIngredientForConnection);
-                    setShowConnectionPrompt(false);
-
-                    // Reuse previous relation
-                    const lastRel = [...currentInstruction].reverse().find(c => c.type === "relation");
-                    if (lastRel) {
-                      setInherentRelation(lastRel.value);
-                    }
-
-                    setShowSemanticPopup(true);
-                    setPendingIngredientForConnection(null);
-                  }}
-                >
-                  OR (या)
+                  Skip Connection
                 </button>
               </div>
-              <button
-                className="btn btn-secondary"
-                style={{ width: "100%", padding: "12px", background: "#f1f5f9", border: "1px solid #e2e8f0", color: "#64748b", borderRadius: "12px", fontSize: "0.9rem" }}
-                onClick={() => {
-                  setPendingIngredient(pendingIngredientForConnection);
-                  setShowConnectionPrompt(false);
-                  setShowSemanticPopup(true);
-                  setPendingIngredientForConnection(null);
-                }}
-              >
-                Skip Connection
-              </button>
             </div>
-          </div>
-        )}
-      </div>
+          )
+        }
+      </div >
     </div >
   );
 };
@@ -3074,37 +3800,20 @@ const SemanticPopup = ({
 
   return (
     <div className="modal-overlay">
-      <div className="semantic-popup">
-        <h5 style={{ marginBottom: "16px" }}>
-          Select Semantic &amp; Morpho-Semantic
+      <div className="semantic-popup" style={{ maxWidth: "400px" }}>
+        <h5 style={{ marginBottom: "16px", color: "#4c6fff", fontWeight: "700" }}>
+          Select Morpho-Semantic
         </h5>
         <div
           style={{
             display: "flex",
-            justifyContent: "space-between",
+            flexDirection: "column",
             gap: "10px",
-            marginBottom: "12px",
+            marginBottom: "20px",
           }}
         >
           <div style={{ flex: 1 }}>
-            <label>
-              <strong>Semantic Category</strong>
-            </label>
-            <select
-              id="semanticCategorySelect"
-              className="form-control"
-              value={semantic}
-              onChange={(e) => setSemantic(e.target.value)}
-            >
-              {semanticOptions.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div style={{ flex: 1 }}>
-            <label>
+            <label style={{ fontSize: "0.9rem", color: "#64748b", marginBottom: "6px", display: "block" }}>
               <strong>Morpho-Semantic</strong>
             </label>
             <select
@@ -3112,6 +3821,7 @@ const SemanticPopup = ({
               className="form-control"
               value={morpho}
               onChange={(e) => setMorpho(e.target.value)}
+              style={{ padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0" }}
             >
               {morphoOptions.map((m) => (
                 <option key={m} value={m}>
@@ -3121,18 +3831,18 @@ const SemanticPopup = ({
             </select>
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <div
-            style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}
+            style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}
           >
-            <button className="btn btn-primary" onClick={handleConfirm}>
+            <button className="btn btn-primary" onClick={handleConfirm} style={{ flex: 1, padding: "12px", borderRadius: "10px", fontWeight: "600" }}>
               ✅ Confirm
             </button>
-            <button className="btn btn-secondary" onClick={onCancel}>
+            <button className="btn btn-secondary" onClick={onCancel} style={{ flex: 1, padding: "12px", borderRadius: "10px", background: "#f1f5f9", color: "#64748b", border: "1px solid #e2e8f0" }}>
               ❌ Cancel
             </button>
           </div>
-          <button className="btn btn-warning" onClick={onSkip}>
+          <button className="btn btn-warning" onClick={onSkip} style={{ width: "100%", padding: "10px", borderRadius: "10px", background: "#fffbeb", color: "#d97706", border: "1px solid #fde68a" }}>
             ⏭️ Skip
           </button>
         </div>
@@ -3208,7 +3918,7 @@ const TAMSelector = ({ tams, onConfirm, onCancel }) => {
 };
 
 
-const RelationPrompt = ({ onConfirm, onSkip, type, currentItem }) => {
+const RelationPrompt = ({ onConfirm, onSkip, type, currentItem, currentInstruction }) => {
   const temporalRelations = [
     "When(time)-कितनी देर तक- अधिकरण/काल",
     "When(time)-कितने देर में- अधिकरण/काल",
@@ -3219,22 +3929,33 @@ const RelationPrompt = ({ onConfirm, onSkip, type, currentItem }) => {
   const generalRelations = [
     "What (subject) - क्या-कर्ता",
     "What (object) - क्या-कर्म",
-    "How - कैसे",
+    "how-कैसे",
     "Whom (recipient) - किसके लिए-सम्प्रदान",
     "From where (source) - कहाँ से-अपादान",
     "Where (place) - कहाँ-अधिकरण/देश",
     "In - किस में",
+    "on - किस पर",
     "Why (reason) - किस के कारण",
     "Like what - किस के समान",
-    "With what - किस के साथ",
+    "With what - किससे",
     "Compared to what - किसके तुलना में",
     "Modifier - विशेषण/क्रिया विशेषण",
     "Quantity - मात्रा",
   ];
 
-  const relationOptions = (type === "temporal" || type === "descriptor") ? temporalRelations : generalRelations;
+  // Check if we're dealing with action+descriptor (should use krvn)
+  const isActionDescriptor = currentItem && currentItem.type === "descriptor" &&
+    currentInstruction && currentInstruction.some(c => c.type === "action_tam");
 
-  const [relation, setRelation] = React.useState(relationOptions[0]);
+  const relationOptions = (type === "temporal") ? temporalRelations : generalRelations;
+
+  const [relation, setRelation] = React.useState(
+    type === "descriptor"
+      ? (isActionDescriptor
+        ? "Action + Descriptor - क्रिया विशेषण (krvn)"
+        : generalRelations.find(r => r.startsWith("Modifier")) || generalRelations[0])
+      : relationOptions[0]
+  );
 
   // Checking if item has numeric duration (e.g. "2 mins") or is a duration object
   const hasDuration = currentItem && (

@@ -1,4 +1,6 @@
+@import "./mobile-optimized.css";
 /* ========= GLOBAL LAYOUT ========= */
+
 
 :root {
   --primary: #3b82f6;
@@ -13,9 +15,39 @@
   --card-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
+/* ========= ANIMATIONS ========= */
+
+@keyframes highlight-pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+
+  50% {
+    box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.highlight-pulse {
+  animation: highlight-pulse 1.5s ease-in-out infinite;
+}
+
 body {
-  font-size: 11px;
-  /* Smaller base font */
+  font-size: 14px;
+  /* Larger base font for readability */
   background: var(--bg-color);
   color: var(--text-primary);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -55,12 +87,13 @@ body {
   width: 100%;
   position: sticky;
   top: 90px;
-  /* Align with bottom of Navbar */
+  /* Align with bottom of Navbar (90px) */
   z-index: 999;
   /* Just below Navbar's 1000 */
   box-shadow: 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  margin-bottom: 60px !important;
+  margin-bottom: 30px !important;
 }
+
 
 .recipe-header-prominent .recipe-title {
   font-size: 1.8rem;
@@ -90,6 +123,63 @@ body {
   }
 }
 
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.back-link-btn {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1.5px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.back-link-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #1e293b;
+  transform: translateX(-2px);
+}
+
+.info-btn {
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: #3b82f6;
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2);
+}
+
+.info-btn:hover {
+  background: #2563eb;
+  transform: scale(1.02);
+  box-shadow: 0 6px 12px -2px rgba(59, 130, 246, 0.3);
+}
+
+.tour-start-btn {
+  transition: all 0.2s ease;
+}
+
+.tour-start-btn:hover {
+  background: #059669 !important;
+  transform: scale(1.02);
+  box-shadow: 0 6px 12px -2px rgba(16, 185, 129, 0.4) !important;
+}
+
 /* ========= STACKED LAYOUT (New Horizontal Row Focus) ========= */
 
 .workspace-stack {
@@ -97,13 +187,14 @@ body {
   flex-direction: column;
   gap: 12px;
   width: 100%;
-  margin-top: 60px !important;
-  /* Increased significantly to 60px */
+  margin-top: 40px !important;
+  /* Increased from 15px to 40px for better visibility of headers */
   background: #f0f7ff;
   padding: 15px;
   border-radius: 12px;
   border: 1px solid #e0f2fe;
 }
+
 
 /* Horizontal Palette Container */
 .horizontal-palette {
@@ -142,7 +233,7 @@ body {
 .palette-row .entity-grid {
   flex: 1;
   overflow-y: auto;
-  font-size: 0.65rem;
+  font-size: 13px;
 }
 
 /* Panel Styling (Sharp & Small) */
@@ -172,8 +263,8 @@ body {
 }
 
 .panel-title {
-  font-size: 0.65rem;
-  /* Small font for titles */
+  font-size: 13px;
+  /* Increased from 0.65rem */
   font-weight: 500;
   color: #334155;
 }
@@ -211,12 +302,12 @@ body {
 }
 
 .section-title {
-  font-size: 0.58rem;
-  /* Extremely small */
+  font-size: 12px;
+  /* Increased from 0.58rem */
   font-weight: 600;
   margin-bottom: 4px;
-  color: #475569;
-  /* Slightly darker for readability at small size */
+  color: #1e293b;
+  /* Darker for readability */
   display: flex;
   align-items: center;
   gap: 4px;
@@ -263,8 +354,8 @@ body {
   gap: 4px;
   cursor: pointer;
   transition: all 0.1s ease;
-  font-size: 0.65rem;
-  /* Small font */
+  font-size: 13px;
+  /* Increased from 0.65rem */
   user-select: none;
 }
 
@@ -714,6 +805,39 @@ body {
   gap: 10px;
   width: 100%;
   align-items: start;
+}
+
+/* Fixed Add Button in Section (Global for Desktop + Mobile base) */
+.section-add-btn {
+  width: 100%;
+  padding: 12px;
+  background: #f0f9ff;
+  border: 2px dashed #bae6fd;
+  color: #0284c7;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-top: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.section-add-btn:hover {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+}
+
+.section-add-btn:active {
+  background: #bae6fd;
+  transform: scale(0.98);
+}
+
+.add-icon {
+  font-size: 1.1rem;
 }
 
 .result-side,
@@ -1322,4 +1446,20 @@ body {
   display: flex;
   gap: 10px;
   margin-top: 15px;
+}
+
+/* ========= MOBILE RESPONSIVENESS (No disruption to laptop) ========= */
+
+
+@media (min-width: 769px) {
+
+  .mobile-palette-tabs,
+  .mobile-output-tabs,
+  .mobile-only {
+    display: none !important;
+  }
+
+  .mobile-hide {
+    display: flex !important;
+  }
 }

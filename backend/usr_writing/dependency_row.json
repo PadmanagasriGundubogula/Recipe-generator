@@ -61,7 +61,7 @@
       "dependency_relation": "ru"
     },
     {
-      "relation": "With what - किस के साथ",
+      "relation": "With what - किससे",
       "dependency_relation": "k3"
     },
     {
@@ -103,6 +103,22 @@
     {
       "relation": "for running - चलने तक",
       "dependency_relation": "k7t"
+    },
+    {
+      "relation": "how",
+      "dependency_relation": "krvn"
+    },
+    {
+      "relation": "how-कैसे",
+      "dependency_relation": "krvn"
+    },
+    {
+      "relation": "krvn",
+      "dependency_relation": "krvn"
+    },
+    {
+      "relation": "k1s",
+      "dependency_relation": "k1s"
     }
   ]
 }

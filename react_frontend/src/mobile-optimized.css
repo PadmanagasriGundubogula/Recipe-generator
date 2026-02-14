@@ -1,0 +1,389 @@
+@media (max-width: 768px) {
+
+    /* Main page wrapper - huge clearance for navbar and fixed left-side clipping */
+    .recipe-page {
+        padding: 85px 12px 100px 12px !important;
+        /* Reduced from 195px to give more space for content */
+        width: 100% !important;
+        max-width: 100vw !important;
+        box-sizing: border-box !important;
+        overflow-x: hidden !important;
+        display: block !important;
+        position: relative !important;
+        background: #f8fafc;
+    }
+
+    /* Sticky designer header - pushed below the real Navbar */
+    .recipe-header-prominent {
+        position: relative !important;
+        top: 0 !important;
+        margin: 0 0 20px 0 !important;
+        padding: 15px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        border-radius: 14px !important;
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+
+    .header-actions {
+        display: flex !important;
+        width: 100% !important;
+        gap: 10px !important;
+        margin-top: 15px !important;
+    }
+
+    .back-link-btn,
+    .info-btn {
+        flex: 1 !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        padding: 12px 10px !important;
+        font-size: 0.82rem !important;
+        border-radius: 12px !important;
+        font-weight: 700 !important;
+        height: 48px !important;
+        box-sizing: border-box !important;
+    }
+
+    .back-link-btn {
+        background: #f1f5f9 !important;
+        border: 1px solid #e2e8f0 !important;
+        color: #475569 !important;
+    }
+
+    .info-btn {
+        background: #3b82f6 !important;
+        color: white !important;
+        border: none !important;
+    }
+
+    /* Recipe Title padding-left for extreme safety */
+    .recipe-header-prominent .recipe-title {
+        font-size: 1.25rem !important;
+        white-space: normal !important;
+        padding-left: 5px !important;
+        line-height: 1.4 !important;
+        color: #0f172a !important;
+        font-weight: 800 !important;
+        margin: 0 !important;
+    }
+
+    .type-badge {
+        font-size: 0.78rem !important;
+        gap: 12px !important;
+        margin-top: 8px !important;
+        padding-left: 5px !important;
+        display: flex !important;
+        color: #10b981 !important;
+    }
+
+    .badge-label {
+        color: #64748b !important;
+        font-weight: 700 !important;
+    }
+
+    /* Section headers - fixed clipping: padding-left: 20px ensures everything is visible */
+    .section-title {
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+        font-weight: 800 !important;
+        font-size: 0.8rem !important;
+        margin-bottom: 12px !important;
+        color: #1e293b !important;
+        letter-spacing: 0.05em !important;
+        text-transform: uppercase !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Horizontal Tab Bar - Includes ACTIONS, INGREDIENTS, DESCRIPTORS, TOOLS, TEMPORAL, RECIPES */
+    .mobile-palette-tabs {
+        display: flex !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        gap: 10px !important;
+        margin-bottom: 20px !important;
+        padding: 10px 15px 15px 15px !important;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: inset 0 -1px 0 #f1f5f9;
+    }
+
+    .mobile-palette-tabs button {
+        padding: 10px 20px !important;
+        border-radius: 10px !important;
+        font-size: 0.68rem !important;
+        background: #f1f5f9 !important;
+        border: 1px solid #e2e8f0 !important;
+        color: #64748b !important;
+        font-weight: 800 !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+        transition: all 0.2s ease;
+    }
+
+    .mobile-palette-tabs button.active {
+        background: #10b981 !important;
+        color: #ffffff !important;
+        border-color: #10b981 !important;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important;
+    }
+
+    /* Palette Grids */
+    .palette-row {
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        height: auto !important;
+        gap: 0 !important;
+    }
+
+    .horizontal-palette {
+        padding: 5px !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+
+    .component-section {
+        width: 100% !important;
+        box-sizing: border-box !important;
+        background: #ffffff !important;
+        border-radius: 18px !important;
+        padding: 15px !important;
+        border: 1px solid #f1f5f9 !important;
+        margin-bottom: 20px !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02) !important;
+        /* Ensure visibility */
+        opacity: 1 !important;
+        visibility: visible !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    .entity-grid {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)) !important;
+        width: 100% !important;
+        gap: 8px !important;
+        padding: 5px !important;
+        height: auto !important;
+        max-height: 450px !important;
+    }
+
+    .entity-card {
+        padding: 12px 10px !important;
+        font-size: 0.75rem !important;
+        min-height: 44px !important;
+        border-radius: 12px !important;
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        display: flex !important;
+        color: #334155 !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        align-items: center !important;
+        gap: 8px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+    }
+
+    .entity-name {
+        font-size: 0.7rem !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        color: #334155 !important;
+        font-weight: 600 !important;
+        line-height: normal !important;
+        flex: 1 !important;
+    }
+
+    /* Builder area chips */
+    .instruction-builder {
+        background: #f8fbff;
+        border-radius: 18px;
+        padding: 15px;
+        width: 100%;
+        box-sizing: border-box;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        min-height: 120px;
+        border: 2px dashed #dbeafe;
+    }
+
+    .dropped-chip {
+        padding: 10px 18px !important;
+        font-size: 0.75rem !important;
+        border-radius: 14px !important;
+        font-weight: 600 !important;
+    }
+
+    /* Vertical Stacking for Result Panels */
+    .split-result-area {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 30px !important;
+        width: 100% !important;
+    }
+
+    .panel-scroll {
+        height: auto !important;
+        min-height: 220px !important;
+    }
+
+    .builder-toolbar {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+        margin-top: 20px !important;
+    }
+
+    .builder-toolbar>div {
+        flex-direction: column !important;
+        width: 100% !important;
+        gap: 12px !important;
+    }
+
+    .generate-btn {
+        width: 100% !important;
+        padding: 15px !important;
+        font-size: 0.95rem !important;
+        justify-content: center !important;
+        border-radius: 14px !important;
+    }
+
+    .submit-dashboard-btn {
+        padding: 16px !important;
+        font-size: 1rem !important;
+        border-radius: 16px !important;
+        font-weight: 800 !important;
+        margin-top: 15px !important;
+        letter-spacing: 0.02em !important;
+    }
+
+    /* Display Helpers */
+    .mobile-hide {
+        display: none !important;
+    }
+
+    .mobile-show {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* Remove confusing overlapping buttons */
+    /* Remove confusing overlapping buttons */
+    /* Fixed Add Button in Section */
+    .section-add-btn {
+        width: 100% !important;
+        padding: 12px !important;
+        background: #f0f9ff !important;
+        border: 2px dashed #bae6fd !important;
+        color: #0284c7 !important;
+        border-radius: 12px !important;
+        font-weight: 700 !important;
+        font-size: 0.9rem !important;
+        margin-top: 10px !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        gap: 8px !important;
+        transition: all 0.2s ease !important;
+    }
+
+    .section-add-btn:active {
+        background: #e0f2fe !important;
+        transform: scale(0.98);
+    }
+
+    .add-icon {
+        font-size: 1.1rem !important;
+    }
+
+    .recipe-menu-btn {
+        display: none !important;
+    }
+
+    /* Palette Item Remove Button - Always visible on mobile or larger touch target */
+    .palette-item-remove {
+        opacity: 1 !important;
+        position: relative !important;
+        top: auto !important;
+        right: auto !important;
+        margin-left: auto !important;
+        background: transparent !important;
+        color: #ef4444 !important;
+        border: none !important;
+        width: 24px !important;
+        height: 24px !important;
+        font-size: 1.2rem !important;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        z-index: 5 !important;
+    }
+
+    /* Output View Tabs */
+    .mobile-output-tabs {
+        display: flex !important;
+        gap: 8px !important;
+        padding: 10px 0 !important;
+        border-bottom: 2px solid #e2e8f0 !important;
+        margin-bottom: 15px !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+
+    .mobile-output-tabs button {
+        padding: 8px 16px !important;
+        border-radius: 20px !important;
+        border: 1px solid #e2e8f0 !important;
+        background: #ffffff !important;
+        color: #64748b !important;
+        font-size: 0.75rem !important;
+        font-weight: 600 !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+    }
+
+    .mobile-output-tabs button.active {
+        background: #3b82f6 !important;
+        color: #ffffff !important;
+        border-color: #3b82f6 !important;
+        box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3) !important;
+    }
+
+    /* Output Sections Override */
+    .split-result-area {
+        display: flex !important;
+        flex-direction: column !important;
+        /* Stack them */
+        gap: 15px !important;
+        width: 100% !important;
+    }
+
+    .split-result-area .panel {
+        width: 100% !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
+        margin-bottom: 0 !important;
+    }
+
+    /* Ensure panels that are visible take full space */
+    .panel.mobile-show {
+        display: flex !important;
+    }
+}

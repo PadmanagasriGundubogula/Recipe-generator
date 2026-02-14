@@ -857,8 +857,14 @@ def graphtousr(input_graph, relations_file_path, recipe_id, db):
 
             # 3) nouns, ingredients, modifiers
             elif node_type in ['noun', 'ingredient', 'modifier']:
-                A_list.append(internal_label)
-                print(f"Noun/Ingredient/Modifier node found: {node_label}")
+                unique_internal = internal_label
+                if node_type == 'modifier':
+                    # Find how many modifiers with this label already exist in A_list
+                    count = sum(1 for x in A_list if str(x).split('__')[0] == internal_label) + 1
+                    unique_internal = f"{internal_label}__{count}"
+                    node_info[unique_internal] = {'type': node_type, 'display': internal_label}
+                A_list.append(unique_internal)
+                print(f"Noun/Ingredient/Modifier node found: {node_label} (unique: {unique_internal})")
 
             # 4) measurements & quantities (meas node, quantity_value, unit_value, number, quant)
             elif node_type in ['intensifier', 'measure', 'unit_value',
@@ -1064,7 +1070,15 @@ def graphtousr(input_graph, relations_file_path, recipe_id, db):
 
         def get_parent_info(node_label_internal):
             """Find which verb or connector points to this node and with what relation"""
-            node_id = next((n['id'] for n in data['nodes'] if n['attributes'].get('label') == node_label_internal), None)
+            # Find the ID of the node corresponding to this internal label
+            # Note: internal_label might be "small__1" while the graph node label is "small"
+            node_label_clean = node_label_internal.split('__')[0]
+            node_id = next(
+                (n['id'] for n in data['nodes'] 
+                 if n['attributes'].get('label') == node_label_clean 
+                 and (n['attributes'].get('node_type') in ['modifier', 'tool'] or n['attributes'].get('node_type') == node_info[node_label_internal]['type'])), 
+                None
+            )
             if not node_id:
                 return verb_tam_index, "rel"
                 
@@ -1272,9 +1286,13 @@ def graphtousr(input_graph, relations_file_path, recipe_id, db):
             if node_type == 'modifier':
                 # Robust parent finding for modifiers
                 mod_display = info.get('display', '').lower()
+                node_label_clean = internal_label.split('__')[0]
+                
+                # Find the actual node ID in the graph for this modifier
+                # We filter by attributes to make sure we find the right one
                 mod_id = next(
                     (node['id'] for node in data['nodes'] 
-                     if node['attributes']['label'] == info['display'] and node['attributes']['node_type'] == 'modifier'),
+                     if node['attributes']['label'] == node_label_clean and node['attributes']['node_type'] == 'modifier'),
                     None
                 )
                 
@@ -1298,8 +1316,20 @@ def graphtousr(input_graph, relations_file_path, recipe_id, db):
                         p_type = parent_node['attributes'].get('node_type')
                         p_label = parent_node['attributes'].get('label', '')
                         
-                        if p_type in ['verb_tam', 'noun', 'ingredient']:
-                            parent_idx = label_to_index_dep.get(p_label.strip('[]'), verb_tam_index)
+                        if p_type in ['verb_tam', 'noun', 'ingredient', 'tool']:
+                            # Try direct label match
+                            p_clean = p_label.strip('[]')
+                            parent_idx = label_to_index_dep.get(p_clean)
+                            
+                            # If not found, try tool suffix match (e.g. "bowl" -> "bowl__1")
+                            if parent_idx is None and p_type == 'tool':
+                                for lab, idx in label_to_index_dep.items():
+                                    if lab.startswith(p_clean + "__"):
+                                        parent_idx = idx
+                                        break
+                                        
+                            if parent_idx is None:
+                                parent_idx = verb_tam_index
                             break
                         elif p_type == 'relation':
                             dep_rel = relation_to_dep.get(p_label, "mod")

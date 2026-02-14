@@ -1,6 +1,7 @@
 // src/Login.jsx
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useGoogleLogin } from "@react-oauth/google";
 import { API_URL } from "./config";
 import "./login.css";
 
@@ -30,34 +31,61 @@ const Login = ({ setIsLoggedIn }) => {
         return;
       }
 
-      // ✅ Store token
-      if (data.token) {
-        localStorage.setItem("token", data.token);
-      }
-
-      // ✅ Store user_id (supports both `id` and `_id`)
-      if (data.user) {
-        const userId = data.user.id || data.user._id;
-        if (userId) {
-          localStorage.setItem("user_id", userId);
-        }
-      }
-
-      // ✅ Update global state immediately
-      if (setIsLoggedIn) setIsLoggedIn(true);
-
-      // ✅ Show success message and navigate automatically
-      setSuccessMessage("Login successful! Redirecting...");
-
-      setTimeout(() => {
-        navigate("/page1");
-      }, 2000);
+      handleLoginSuccess(data);
 
     } catch (err) {
       console.error(err);
       setError("Something went wrong — try again.");
     }
   };
+
+  const handleLoginSuccess = (data) => {
+    // ✅ Store token
+    if (data.token) {
+      localStorage.setItem("token", data.token);
+    }
+
+    // ✅ Store user_id (supports both `id` and `_id`)
+    if (data.user) {
+      const userId = data.user.id || data.user._id;
+      if (userId) {
+        localStorage.setItem("user_id", userId);
+      }
+    }
+
+    // ✅ Update global state immediately
+    if (setIsLoggedIn) setIsLoggedIn(true);
+
+    // ✅ Show success message and navigate automatically
+    setSuccessMessage("Login successful! Redirecting...");
+
+    setTimeout(() => {
+      navigate("/page1");
+    }, 2000);
+  };
+
+  const googleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        const res = await fetch(`${API_URL}/google-login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: tokenResponse.access_token }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || "Google login failed");
+        } else {
+          handleLoginSuccess(data);
+        }
+      } catch (err) {
+        console.error(err);
+        setError("Google authentication failed.");
+      }
+    },
+    onError: () => setError("Google login failed"),
+  });
 
   return (
     <div className="container">
@@ -105,6 +133,21 @@ const Login = ({ setIsLoggedIn }) => {
 
           <button type="submit" className="btn">
             Login
+          </button>
+
+          <div className="separator">OR</div>
+
+          <button
+            type="button"
+            className="google-btn"
+            onClick={() => googleLogin()}
+          >
+            <img
+              src="https://www.svgrepo.com/show/475656/google-color.svg"
+              alt="Google"
+              style={{ width: "20px", height: "20px" }}
+            />
+            Continue with Google
           </button>
         </form>
 

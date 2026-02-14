@@ -1,6 +1,7 @@
 // src/Signup.jsx
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useGoogleLogin } from "@react-oauth/google";
 import { API_URL } from "./config";
 import "./login.css"; // reuse same styles as Login
 
@@ -41,7 +42,7 @@ const Signup = ({ setIsLoggedIn }) => {
         setSuccessMessage("Signup successful! Please login to continue.");
 
         setTimeout(() => {
-          navigate("/");
+          navigate("/login");
         }, 2000);
       }
     } catch (err) {
@@ -51,6 +52,54 @@ const Signup = ({ setIsLoggedIn }) => {
       setLoading(false);
     }
   };
+
+  const handleGoogleSuccess = (data) => {
+    // Similar to login success, but since it's signup page, maybe we log them in directly?
+    // The backend /google-login returns a token and user object, effectively logging them in.
+
+    if (data.token) {
+      localStorage.setItem("token", data.token);
+    }
+
+    if (data.user) {
+      const userId = data.user.id || data.user._id;
+      if (userId) {
+        localStorage.setItem("user_id", userId);
+      }
+    }
+
+    if (setIsLoggedIn) setIsLoggedIn(true);
+
+    setSuccessMessage("Google Signup successful! Logging you in...");
+
+    setTimeout(() => {
+      navigate("/page1");
+    }, 2000);
+  };
+
+  const googleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        // We use the same /google-login endpoint for both signup and login
+        const res = await fetch(`${API_URL}/google-login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: tokenResponse.access_token }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || "Google signup failed");
+        } else {
+          handleGoogleSuccess(data);
+        }
+      } catch (err) {
+        console.error(err);
+        setError("Google authentication failed.");
+      }
+    },
+    onError: () => setError("Google signup failed"),
+  });
 
   return (
     <div className="container">
@@ -110,6 +159,21 @@ const Signup = ({ setIsLoggedIn }) => {
 
           <button type="submit" className="btn" disabled={loading}>
             {loading ? "Signing up..." : "Sign Up"}
+          </button>
+
+          <div className="separator">OR</div>
+
+          <button
+            type="button"
+            className="google-btn"
+            onClick={() => googleLogin()}
+          >
+            <img
+              src="https://www.svgrepo.com/show/475656/google-color.svg"
+              alt="Google"
+              style={{ width: "20px", height: "20px" }}
+            />
+            Continue with Google
           </button>
         </form>
 

@@ -436,6 +436,38 @@
   }
 }
 
+@media (max-width: 600px) {
+  .recipe-page {
+    padding: 10px;
+    padding-bottom: 80px;
+  }
+
+  .content-side {
+    padding: 20px;
+    gap: 20px;
+  }
+
+  .image-overlay h2 {
+    font-size: 1.8rem;
+  }
+
+  .recipe-types-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .type-image {
+    height: 70px;
+  }
+
+  .recipe-input,
+  .generate-btn {
+    padding: 15px;
+    font-size: 0.9rem;
+  }
+}
+
+
 .no-items-text {
   color: var(--text-secondary);
   font-size: 0.9rem;

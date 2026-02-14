@@ -13,3 +13,4 @@ dnspython
 PyJWT
 bcrypt
 requests
+google-generativeai

@@ -404,32 +404,82 @@ def send_usr():
                 "raw_result": result,
             }), 404
 
-        # ✅ Create an instruction document
+        # 🔹 Coreference Resolution (English only)
+        if generation_language == "english":
+            try:
+                from coreference import resolve_running_text
+                
+                # Fetch history for context
+                prev_cursor = instructions_collection.find(
+                    {"recipe_id": recipe_id}
+                ).sort("step_number", 1)
+                history = [doc.get("instruction_text", "") for doc in prev_cursor]
+                
+                if history:
+                    # If we are modifying, exclude the current instruction from context to avoid feedback loops
+                    if modify_sentence_id:
+                        history = [doc.get("instruction_text", "") for doc in prev_cursor if doc.get("sentence_id") != modify_sentence_id]
+
+                    context_text = " ".join(history) + " " + " ".join(sentences)
+                    resolved_text = resolve_running_text(context_text)
+                    
+                    # Extract only the newly generated part (last sentences)
+                    all_resolved = [s.strip() for s in resolved_text.split(".") if s.strip()]
+                    if len(all_resolved) >= len(sentences):
+                        sentences = all_resolved[-len(sentences):]
+                        # Add periods back if they were stripped
+                        sentences = [s + "." if not s.endswith(".") else s for s in sentences]
+            except Exception as e:
+                print(f"Coreference resolution skip/failed: {e}")
+
+        # ✅ Create or Update an instruction document
         now = datetime.datetime.utcnow()
+        modify_sentence_id = data.get("modify_sentence_id")
+        
+        existing_instruction = None
+        if modify_sentence_id:
+            existing_instruction = instructions_collection.find_one({"sentence_id": modify_sentence_id})
 
-        # auto step_number = count existing instructions for this recipe + 1
-        existing_count = instructions_collection.count_documents({"recipe_id": recipe_id})
-        step_number = existing_count + 1
-
-        instruction_doc = {
-        "recipe_id": recipe_id,
-        "graph_id": graph_id,
-        "usr_id": usr_doc["_id"] if usr_doc else None,
-        "step_number": step_number,
-        "instruction_text": sentences[0],
-        "english_sentences": sentences,
-        "sentence_id": str(uuid.uuid4()),     # <-- ADD THIS LINE
-        "created_at": now,
-        "updated_at": now,
-    }
-
-
-        ins_res = instructions_collection.insert_one(instruction_doc)
+        if existing_instruction:
+            # UPDATE existing
+            instructions_collection.update_one(
+                {"sentence_id": modify_sentence_id},
+                {"$set": {
+                    "graph_id": graph_id,
+                    "usr_id": usr_doc["_id"] if usr_doc else None,
+                    "instruction_text": sentences[0],
+                    "english_sentences": sentences,
+                    "language": generation_language,
+                    "updated_at": now
+                }}
+            )
+            instruction_id = str(existing_instruction["_id"])
+            step_number = existing_instruction.get("step_number", 1)
+            message = "Instruction updated successfully"
+        else:
+            # CREATE new
+            existing_count = instructions_collection.count_documents({"recipe_id": recipe_id})
+            step_number = existing_count + 1
+            instruction_doc = {
+                "recipe_id": recipe_id,
+                "graph_id": graph_id,
+                "usr_id": usr_doc["_id"] if usr_doc else None,
+                "step_number": step_number,
+                "instruction_text": sentences[0], 
+                "english_sentences": sentences,
+                "language": generation_language,
+                "sentence_id": str(uuid.uuid4()),
+                "created_at": now,
+                "updated_at": now,
+            }
+            ins_res = instructions_collection.insert_one(instruction_doc)
+            instruction_id = str(ins_res.inserted_id)
+            message = "Sentences generated successfully"
 
         return jsonify({
-            "message": "Sentences generated successfully",
+            "message": message,
             "recipe_id": recipe_id,
-            "instruction_id": str(ins_res.inserted_id),
+            "instruction_id": instruction_id,
             "step_number": step_number,
             "english_sentences": sentences,
         }), 200
@@ -513,6 +563,8 @@ def generate_running_text():
             return jsonify({"error": "No USR texts found for given sentence order"}), 404
 
         # ✅ Parse ALL USR texts into structures (same as /send-usr does)
+        # This preserves the order of sentences as specified by the user
+        # and maintains discourse markers from the USR
         all_structures = []
         for usr_text in all_usr_texts:
             structures_list = parse_usr_text_to_graphs(usr_text)
@@ -523,6 +575,8 @@ def generate_running_text():
             return jsonify({"error": "Could not parse any USR texts into structures"}), 400
 
         # ✅ Convert to JSON string (same format as /send-usr)
+        # The structures maintain discourse markers from USR, ensuring
+        # that Hindi generation follows the same order and discourse as English
         structures_str = json.dumps(all_structures, ensure_ascii=False)
 
         # 🔥 External generation call (same format as /send-usr)
@@ -623,7 +677,8 @@ def get_sentences_with_id(recipe_id):
                 "step_number": doc.get("step_number"),
                 "usr_id": str(doc.get("usr_id")) if doc.get("usr_id") else None,
                 "graph_id": str(graph_id_val) if graph_id_val else None,
-                "instruction_payload": instruction_payload
+                "instruction_payload": instruction_payload,
+                "language": doc.get("language") # 👈 Add language
             })
 
         return jsonify({"instructions": result}), 200

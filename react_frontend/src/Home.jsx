@@ -22,16 +22,16 @@ const Home = ({ isLoggedIn, lang, handleLangChange }) => {
       tip: "Specific names often yield better automated suggestions for tools and secondary ingredients!"
     },
     2: {
-      title: "Step 2: Build Instructions",
-      description: "Construct each step of your recipe visually without writing a single line of text.",
+      title: "Step 2: Build with Voice & Vision",
+      description: "Construct each step of your recipe visually or by using advanced voice commands.",
       steps: [
         "Use the Side Palette: Find Actions (Mix, Chop), Ingredients, and Tools.",
-        "Click to Add: Click on items in the side palette to add them into the central workspace. The order you select them determines the sentence flow.",
-        "Fine-tune: Click on objects in the workspace to adjust quantities, units, or names.",
-        "Generate: Once a step looks complete, hit 'Generate Sentence' to see the AI turn your blocks into a perfect instruction.",
-        "Navigate: Use the 'Next: Sentence Relations' button once you've built all your steps."
+        "Voice Input: Click the 🎙️ icon to speak your instruction naturally. Our AI transcribes and structures it for you!",
+        "Guided Voice Mode: Use '🎧 Guided Voice' for a step-by-step assistant that helps you fill in actions and ingredients one-by-one.",
+        "Click to Add: Or manually click on items in the side palette to add them into the central workspace.",
+        "Generate: Once a step looks complete, hit 'Generate Sentence' to see the AI turn your input into a perfect instruction.",
       ],
-      tip: "Try clicking an Action first, then an Ingredient—the AI handles the grammar for you!"
+      tip: "You can even listen to your generated steps by clicking the 🔊 icon!"
     },
     3: {
       title: "Step 3: Combine & Finalize",
@@ -87,9 +87,10 @@ const Home = ({ isLoggedIn, lang, handleLangChange }) => {
             </p>
             <ul className="tool-features">
               <li>✅ Personalized Recipe Types</li>
+              <li>✅ Voice-to-Recipe Transcription</li>
               <li>✅ AI-Driven Sentence Generation</li>
               <li>✅ Intuitive Reordering Logic</li>
-              <li>✅ Multi-language Support</li>
+              <li>✅ Text-to-Speech Feedback</li>
             </ul>
             <button className="btn-primary start-btn" onClick={() => isLoggedIn ? navigate('/page1') : navigate('/login')}>
               {isLoggedIn ? 'Explore Tool' : 'Login'}

@@ -28,15 +28,20 @@ const Navbar = ({ lang, handleLangChange, isLoggedIn, handleLogout }) => {
                         <span className="logo-text">RecipeGen</span>
                     </Link>
 
-                    <button
-                        className={`hamburger ${isMenuOpen ? 'active' : ''}`}
-                        onClick={() => setIsMenuOpen(!isMenuOpen)}
-                        aria-label="Toggle navigation"
-                    >
-                        <span className="bar"></span>
-                        <span className="bar"></span>
-                        <span className="bar"></span>
-                    </button>
+                    <div className="navbar-mobile-actions">
+                        <button className="search-btn-mobile" aria-label="Search">
+                        </button>
+                        <button
+                            className={`hamburger ${isMenuOpen ? 'active' : ''}`}
+                            onClick={() => setIsMenuOpen(!isMenuOpen)}
+                            aria-label="Toggle navigation"
+                        >
+                            <span className="bar"></span>
+                            <span className="bar"></span>
+                            <span className="bar"></span>
+                        </button>
+                    </div>
+
                 </div>
 
                 <div className={`nav-menu-container ${isMenuOpen ? 'open' : ''}`}>

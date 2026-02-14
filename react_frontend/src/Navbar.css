@@ -161,8 +161,11 @@
   .navbar {
     height: 70px;
     padding: 0;
-    /* Reset padding from previous media query */
+    backdrop-filter: none !important;
+    /* Avoid blur flicker on mobile */
+    -webkit-backdrop-filter: none !important;
   }
+
 
   .hamburger {
     display: block;
@@ -222,8 +225,8 @@
   }
 
   .nav-item {
-    font-size: 1.2rem;
-    padding: 10px;
+    font-size: 1rem;
+    padding: 8px;
     text-align: center;
     width: 100%;
     border-bottom: 1px solid #f1f3f5;
@@ -249,8 +252,38 @@
   }
 }
 
-@media (max-width: 480px) {
+/* Specific Mobile Navbar Fixes */
+@media (max-width: 900px) {
+  .navbar-mobile-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+
+  .search-btn-mobile {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 5px;
+  }
+
+  .navbar-container {
+    width: 95%;
+  }
+
   .logo-text {
-    display: none;
+    display: block !important;
+    font-size: 1.2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .logo-img {
+    height: 28px !important;
+  }
+
+  .logo-text {
+    font-size: 1rem !important;
   }
 }

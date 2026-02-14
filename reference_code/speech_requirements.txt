@@ -1,0 +1,10 @@
+fastapi==0.124.0
+uvicorn[standard]==0.38.0
+python-multipart==0.0.20
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+sqlalchemy==2.0.36
+pydantic==2.12.5
+SpeechRecognition==3.14.4
+pydub==0.25.1
+PyJWT==2.10.1

@@ -3,32 +3,64 @@ import { useNavigate } from "react-router-dom";
 import { Info } from "lucide-react";
 import "./sentence-relations.css";
 import { translateText } from "./translate";
+import { API_URL } from "./config";
 
 const RELATIONS = [
-  "although",
-  "if then",
-  "if",
-  "otherwise",
-  "or",
-  "after",
-  "before",
-  "thus",
-  "that's why",
-  "as a result",
-  "because",
-  "because of",
-  "due to",
   "and",
+  "or",
+  "but",
+  "also",
   "as well as",
   "besides",
   "in addition",
   "along with",
-  "not only..but also",
-  "but",
+  "furthermore",
+  "moreover",
+  "likewise",
+  "similarly",
+  "In the same way",
+  "either...or",
+  "rather",
+  "alternatively",
+  "yet",
+  "still",
+  "nevertheless",
+  "nonetheless",
+  "though",
+  "although",
   "even though",
   "despite",
+  "whereas",
+  "while",
+  "in spite of",
+  "on the contrary",
+  "instead",
   "however",
   "in other words",
+  "if",
+  "if then",
+  "even if",
+  "unless",
+  "otherwise",
+  "after",
+  "before",
+  "then",
+  "Subsequently",
+  "meanwhile",
+  "Since",
+  "As",
+  "Given that",
+  "because",
+  "because of",
+  "due to",
+  "so",
+  "Therefore",
+  "hence",
+  "as a result",
+  "thus",
+  "that's why",
+  "not only..but also",
+  "for instance",
   "for example"
 ];
 
@@ -86,7 +118,7 @@ export default function SentenceRelations() {
         // Fetch recipe details to get the name
         let currentRecipeName = "dish";
         try {
-          const recipeRes = await fetch(`http://localhost:2000/get-recipe/${recipeId}`);
+          const recipeRes = await fetch(`${API_URL}/get-recipe/${recipeId}`);
           const recipeData = await recipeRes.json();
           if (recipeRes.ok) {
             const name = recipeData.recipe_name || "dish";
@@ -102,7 +134,7 @@ export default function SentenceRelations() {
           console.error("Error fetching recipe name:", e);
         }
 
-        const res = await fetch(`http://localhost:2000/get-sentences-with-id/${recipeId}`);
+        const res = await fetch(`${API_URL}/get-sentences-with-id/${recipeId}`);
         const data = await res.json();
 
         let rawList = [];
@@ -204,55 +236,44 @@ export default function SentenceRelations() {
     if (!s1 || !s2) return "";
 
     switch (relation) {
+      case "then":
+        return upperFirst(`${s1}, then ${lowerFirst(s2)}.`);
       case "and":
         return upperFirst(`${s1} and ${lowerFirst(s2)}.`);
       case "or":
         return upperFirst(`${s1} or ${lowerFirst(s2)}.`);
       case "but":
-        return upperFirst(`${s1} but ${lowerFirst(s2)}.`);
-      case "yet":
-        return upperFirst(`${s1} yet ${lowerFirst(s2)}.`);
-      case "while":
-        return upperFirst(`${s1} while ${lowerFirst(s2)}.`);
-      case "whereas":
-        return upperFirst(`${s1} whereas ${lowerFirst(s2)}.`);
+        return upperFirst(`${s1}, but ${lowerFirst(s2)}.`);
       case "as well as":
-        return upperFirst(`${s1} as well as ${lowerFirst(s2)}.`);
+        return upperFirst(`${s1}, as well as ${lowerFirst(s2)}.`);
       case "besides":
-        return upperFirst(`${s1} besides ${lowerFirst(s2)}.`);
+        return upperFirst(`${s1}; besides, ${lowerFirst(s2)}.`);
       case "in addition":
-        return upperFirst(`${s1} in addition ${lowerFirst(s2)}.`);
+        return upperFirst(`${s1}; in addition, ${lowerFirst(s2)}.`);
       case "along with":
-        return upperFirst(`${s1} along with ${lowerFirst(s2)}.`);
+        return upperFirst(`${s1}, along with ${lowerFirst(s2)}.`);
       case "if then":
-      case "if":
         return upperFirst(`If ${lowerFirst(s1)}, then ${lowerFirst(s2)}.`);
+      case "if":
+        return upperFirst(`If ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
       case "otherwise":
         return upperFirst(`${s1}. Otherwise, ${lowerFirst(s2)}.`);
       case "after":
-        return upperFirst(`${s1}. After ${lowerFirst(s2)}.`);
+        return upperFirst(`After ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
       case "before":
-        return upperFirst(`${s1}. Before ${lowerFirst(s2)}.`);
-      case "next":
-        return upperFirst(`${s1}. Next, ${lowerFirst(s2)}.`);
-      case "after that":
-        return upperFirst(`${s1}. After that, ${lowerFirst(s2)}.`);
+        return upperFirst(`Before ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
       case "because":
-        return upperFirst(`Because ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
+        return upperFirst(`${s1} because ${lowerFirst(s2)}.`);
       case "because of":
-        return upperFirst(`Because of ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
+        return upperFirst(`${s2} because of ${lowerFirst(s1)}.`);
       case "due to":
-        return upperFirst(`Due to ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
+        return upperFirst(`${s2} due to ${lowerFirst(s1)}.`);
       case "thus":
         return upperFirst(`${s1}. Thus, ${lowerFirst(s2)}.`);
       case "that's why":
-        return upperFirst(`${s1}. That's why, ${lowerFirst(s2)}.`);
+        return upperFirst(`${s1}. That is why ${lowerFirst(s2)}.`);
       case "as a result":
         return upperFirst(`${s1}. As a result, ${lowerFirst(s2)}.`);
-      case "therefore":
-        return upperFirst(`${s1}. Therefore, ${lowerFirst(s2)}.`);
-      case "so that":
-        return upperFirst(`${s1} so that ${lowerFirst(s2)}.`);
       case "although":
         return upperFirst(`Although ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
       case "even though":
@@ -267,7 +288,70 @@ export default function SentenceRelations() {
         return upperFirst(`${s1}. In other words, ${lowerFirst(s2)}.`);
       case "for example":
         return upperFirst(`${s1}. For example, ${lowerFirst(s2)}.`);
+
+      // Keeping existing others that weren't explicitly redefined but are in the RELATIONS list
+      case "also":
+        return upperFirst(`${s1}. Also, ${lowerFirst(s2)}.`);
+      case "furthermore":
+        return upperFirst(`${s1}. Furthermore, ${lowerFirst(s2)}.`);
+      case "moreover":
+        return upperFirst(`${s1}. Moreover, ${lowerFirst(s2)}.`);
+      case "likewise":
+        return upperFirst(`${s1}. Likewise, ${lowerFirst(s2)}.`);
+      case "similarly":
+        return upperFirst(`${s1}. Similarly, ${lowerFirst(s2)}.`);
+      case "In the same way":
+        return upperFirst(`${s1}. In the same way, ${lowerFirst(s2)}.`);
+      case "either...or":
+        return upperFirst(`Either ${lowerFirst(s1)} or ${lowerFirst(s2)}.`);
+      case "rather":
+        return upperFirst(`${s1}. Rather, ${lowerFirst(s2)}.`);
+      case "alternatively":
+        return upperFirst(`${s1}. Alternatively, ${lowerFirst(s2)}.`);
+      case "yet":
+        return upperFirst(`${s1}, yet ${lowerFirst(s2)}.`);
+      case "still":
+        return upperFirst(`${s1}. Still, ${lowerFirst(s2)}.`);
+      case "nevertheless":
+        return upperFirst(`${s1}. Nevertheless, ${lowerFirst(s2)}.`);
+      case "nonetheless":
+        return upperFirst(`${s1}. Nonetheless, ${lowerFirst(s2)}.`);
+      case "though":
+        return upperFirst(`Though ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
+      case "whereas":
+        return upperFirst(`Whereas ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
+      case "while":
+        return upperFirst(`${s1}, while ${lowerFirst(s2)}.`);
+      case "in spite of":
+        return upperFirst(`In spite of ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
+      case "on the contrary":
+        return upperFirst(`${s1}. On the contrary, ${lowerFirst(s2)}.`);
+      case "instead":
+        return upperFirst(`${s1}. Instead, ${lowerFirst(s2)}.`);
+      case "Since":
+        return upperFirst(`Since ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
+      case "As":
+        return upperFirst(`As ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
+      case "Given that":
+        return upperFirst(`Given that ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
+      case "so":
+        return upperFirst(`${s1}, so ${lowerFirst(s2)}.`);
+      case "Therefore":
+        return upperFirst(`${s1}, therefore ${lowerFirst(s2)}.`);
+      case "hence":
+        return upperFirst(`${s1}, hence ${lowerFirst(s2)}.`);
+      case "meanwhile":
+        return upperFirst(`${s1}, meanwhile ${lowerFirst(s2)}.`);
+      case "Subsequently":
+        return upperFirst(`${s1}, subsequently ${lowerFirst(s2)}.`);
+      case "unless":
+        return upperFirst(`${s1}, unless ${lowerFirst(s2)}.`);
+      case "even if":
+        return upperFirst(`Even if ${lowerFirst(s1)}, ${lowerFirst(s2)}.`);
+      case "for instance":
+        return upperFirst(`${s1}. For instance, ${lowerFirst(s2)}.`);
       default:
+        // Default to a simple space join if relation name isn't matched perfectly
         return upperFirst(`${s1} ${relation} ${lowerFirst(s2)}.`);
     }
   };
@@ -294,7 +378,7 @@ export default function SentenceRelations() {
       return;
     }
 
-    fetch("http://localhost:2000/add-discourse", {
+    fetch(`${API_URL}/add-discourse`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -325,7 +409,7 @@ export default function SentenceRelations() {
   const handleRemoveCombined = (idx) => {
     const removed = combinedSentences[idx];
 
-    fetch("http://localhost:2000/remove-discourse", {
+    fetch(`${API_URL}/remove-discourse`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -376,15 +460,41 @@ export default function SentenceRelations() {
       const recipeId = localStorage.getItem("currentRecipeId");
       const uiLanguage = localStorage.getItem("app_language") || "english";
 
+      // Filter out generic sentences from finalStructure
+      // Generic sentences should not be sent to backend for generation
+      const nonGenericStructure = finalStructure.filter((item, index) => {
+        const step = finalSteps[index];
+        // Check if this step contains generic text
+        const isGeneric = step && (
+          step.includes("ready to enjoy") ||
+          step.includes("Time to eat") ||
+          step.includes("Serve and enjoy") ||
+          step.includes("recipe is complete") ||
+          step.toLowerCase().includes("serve as desired")
+        );
+        return !isGeneric;
+      });
+
+      // Find the generic line if it exists
+      const genericLine = finalSteps.find(step =>
+        step && (
+          step.includes("ready to enjoy") ||
+          step.includes("Time to eat") ||
+          step.includes("Serve and enjoy") ||
+          step.includes("recipe is complete") ||
+          step.toLowerCase().includes("serve as desired")
+        )
+      );
+
       const payload = {
         recipe_id: recipeId,
-        sentence_order: finalStructure,
+        sentence_order: nonGenericStructure,  // Send only non-generic sentences
         ui_language: uiLanguage
       };
 
       console.log("Sending to backend:", payload);
 
-      const res = await fetch("http://localhost:2000/generate-running-text", {
+      const res = await fetch(`${API_URL}/generate-running-text`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -393,14 +503,22 @@ export default function SentenceRelations() {
       const data = await res.json();
       console.log("Running text response:", data);
 
+      let generatedParagraph = "";
       if (data.status === "success" && data.generated_text) {
-        setGeneratedText(data.generated_text);
-        alert("Running text generated successfully!");
+        generatedParagraph = data.generated_text;
       } else if (data.generator_response?.paragraph_wrapped) {
-        setGeneratedText(data.generator_response.paragraph_wrapped);
-        alert("Running text generated successfully!");
+        generatedParagraph = data.generator_response.paragraph_wrapped;
       } else if (data.generator_response?.paragraph) {
-        setGeneratedText(data.generator_response.paragraph);
+        generatedParagraph = data.generator_response.paragraph;
+      }
+
+      // Append generic line at the end if it exists
+      if (generatedParagraph && genericLine) {
+        generatedParagraph = generatedParagraph.trim() + " " + genericLine;
+      }
+
+      setGeneratedText(generatedParagraph);
+      if (generatedParagraph) {
         alert("Running text generated successfully!");
       } else {
         alert("Text generated but format unexpected. Check console.");
@@ -418,7 +536,7 @@ export default function SentenceRelations() {
       const recipeId = localStorage.getItem("currentRecipeId");
       if (!recipeId) return;
 
-      const recipeResp = await fetch(`http://localhost:2000/get-recipe/${recipeId}`);
+      const recipeResp = await fetch(`${API_URL}/get-recipe/${recipeId}`);
       const recipeData = await recipeResp.json();
 
       const ingredients = Array.isArray(recipeData.ingredients) ? recipeData.ingredients.join(", ") : "N/A";
@@ -464,7 +582,30 @@ export default function SentenceRelations() {
       if (generatedText && !generatedHindiText) {
         setTranslating(true);
         try {
-          const hi = await translateText(generatedText, "hi", "en");
+          // 🔥 Remove generic line from text before translating to Hindi
+          // Generic line should ONLY appear in English, not in Hindi
+          let textToTranslate = generatedText;
+
+          // Check if text contains a generic closing line
+          const genericPatterns = [
+            /That's it[^.]*ready to enjoy!/i,
+            /Time to eat.*Serve and enjoy\./i,
+            /Serve as desired.*complete\./i,
+            /cooking is complete.*serve as desired\./i,
+            /dish is now ready.*enjoy as desired\./i,
+            /recipe is complete.*enjoy\./i
+          ];
+
+          // Remove generic line if found
+          for (const pattern of genericPatterns) {
+            if (pattern.test(textToTranslate)) {
+              textToTranslate = textToTranslate.replace(pattern, '').trim();
+              break;
+            }
+          }
+
+          // Translate only the non-generic part to Hindi
+          const hi = await translateText(textToTranslate, "hi", "en");
           setGeneratedHindiText(hi);
         } catch (e) {
           console.error("Auto-translate error:", e);
@@ -481,8 +622,9 @@ export default function SentenceRelations() {
     setFinalStructure(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleReorder = (currentIndex, newPosition) => {
-    let newIndex = parseInt(newPosition, 10);
+  const handleReorder = (currentIndex, newValue) => {
+    if (newValue === "") return; // Let user clear input
+    let newIndex = parseInt(newValue, 10);
     if (isNaN(newIndex)) return;
 
     newIndex = newIndex - 1;
@@ -514,7 +656,7 @@ export default function SentenceRelations() {
     if (!sentenceId) return;
     try {
       setLoadingInspect(true);
-      const res = await fetch(`http://localhost:2000/get-instruction-details/${sentenceId}`);
+      const res = await fetch(`${API_URL}/get-instruction-details/${sentenceId}`);
       const data = await res.json();
       if (res.ok) {
         setInspectData(data);
@@ -645,11 +787,69 @@ export default function SentenceRelations() {
 
           <div className="relations-layout-2col">
             <div className="relations-left-panel">
-              <div className="panel-header">
-                <h2>Available Steps</h2>
-                <span className="panel-meta">
-                  {instructions.length} original · {combinedSentences.length} combined
-                </span>
+              <div className="panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <h2>Available Steps</h2>
+                  <span className="panel-meta">
+                    {instructions.length} original · {combinedSentences.length} combined
+                  </span>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (allSteps.length === 0) {
+                      alert("No steps available to download.");
+                      return;
+                    }
+
+                    try {
+                      const recipeId = localStorage.getItem("currentRecipeId");
+                      const recipeResp = await fetch(`http://localhost:2000/get-recipe/${recipeId}`);
+                      const recipeData = await recipeResp.json();
+
+                      let content = `RECIPE: ${recipeInfo.name || "N/A"}\n`;
+                      content += `TYPE: ${recipeInfo.type || "N/A"}\n`;
+                      content += `TIME: ${recipeInfo.time || "N/A"} minutes\n`;
+                      content += `\n${"-".repeat(50)}\n\n`;
+                      content += `ALL AVAILABLE STEPS:\n\n`;
+
+                      for (let i = 0; i < allSteps.length; i++) {
+                        const step = allSteps[i];
+                        content += `${i + 1}. ${step.text}\n`;
+
+                        // Try to get USR for each step if it's an original sentence
+                        if (!step.isCombined && step.sentence_id) {
+                          try {
+                            const res = await fetch(`${API_URL}/get-instruction-details/${step.sentence_id}`);
+                            const data = await res.json();
+                            if (res.ok && data.usr_text) {
+                              content += `\nUSR:\n${data.usr_text}\n`;
+                            }
+                          } catch (err) {
+                            console.error("Error fetching USR for step", i + 1);
+                          }
+                        }
+                        content += `\n${"-".repeat(50)}\n\n`;
+                      }
+
+                      const blob = new Blob([content], { type: "text/plain" });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement("a");
+                      link.href = url;
+                      link.download = `${recipeInfo.name || "recipe"}_all_steps.txt`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    } catch (err) {
+                      console.error("Download failed:", err);
+                      alert("Failed to download all steps.");
+                    }
+                  }}
+                  style={{ fontSize: "0.75rem", background: "#4c6fff", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer" }}
+                  title="Download all available steps with USR data"
+                >
+                  ⬇️ Download All
+                </button>
               </div>
 
               <div className="sentence-list">
@@ -782,7 +982,13 @@ export default function SentenceRelations() {
                       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                         <button
                           type="button"
-                          onClick={handleCombine}
+                          onClick={() => {
+                            if (instructions.length < 2) {
+                              alert("⚠️ Please generate at least 2 sentences on Page 2 before adding discourse relations.");
+                              return;
+                            }
+                            handleCombine();
+                          }}
                           className="primary-btn"
                           disabled={selectedIndices.length !== 2}
                         >
@@ -791,7 +997,7 @@ export default function SentenceRelations() {
                         <Info
                           size={20}
                           style={{ cursor: "help", color: "#4c6fff" }}
-                          title="add atleast two sentences to add discourse"
+                          title="Select 2 sentences from the list above and choose a relation to combine them. You need at least 2 generated sentences to add discourse."
                         />
                       </div>
                     </div>

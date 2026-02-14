@@ -151,9 +151,23 @@ export default function RecipeCreator() {
     (ing) => !selectedIngredients.includes(ing)
   );
 
-  const searchedIngredients = allIngredients.filter(ing =>
+  // Merge database ingredients with hardcoded suggestions for a complete search pool
+  const allSearchable = React.useMemo(() => {
+    // 1. Database items
+    const dbItems = allIngredients.map(i => ({ name: i.name, isFromDb: true }));
+
+    // 2. Hardcoded suggestions for current type
+    const suggestions = (SUGGESTED_INGREDIENTS[selectedType] || []).map(s => ({ name: s, isFromDb: false }));
+
+    // Combine and make unique
+    const combined = [...dbItems, ...suggestions];
+    return Array.from(new Set(combined.map(c => c.name.toLowerCase())))
+      .map(name => combined.find(c => c.name.toLowerCase() === name));
+  }, [allIngredients, selectedType]);
+
+  const searchedIngredients = allSearchable.filter(ing =>
     ing.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-    !selectedIngredients.includes(ing.name)
+    !selectedIngredients.some(s => s.toLowerCase() === ing.name.toLowerCase())
   );
 
   return (

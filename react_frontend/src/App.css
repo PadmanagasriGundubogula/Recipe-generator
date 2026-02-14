@@ -1,6 +1,6 @@
 .content-area {
-  padding-top: 90px;
-  /* Exact match for Navbar height */
+  padding-top: 110px;
+  /* Navbar height (90px) + Gap (20px) */
   min-height: calc(100vh - 90px);
   padding-bottom: 40px;
 }
@@ -8,4 +8,13 @@
 .app-main-container {
   width: 100%;
   overflow-x: hidden;
+}
+
+@media (max-width: 900px) {
+  .content-area {
+    padding-top: 90px;
+    /* Navbar height (70px) + Gap (20px) */
+    min-height: 100vh;
+  }
+
 }

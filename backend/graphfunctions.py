@@ -315,6 +315,8 @@ def create_graph_from_instruction(
 
     G = graph_manager.current_graph.copy() if graph_manager.current_graph else nx.DiGraph()
 
+    added_nouns = {} # Track added nouns to avoid duplicates
+
     # Find existing verb+TAM node
     existing_verb_tam = next(
         (node for node, attrs in G.nodes(data=True)
@@ -361,6 +363,7 @@ def create_graph_from_instruction(
                 G.add_edge(v_rel, s_node)
 
     # Verb descriptors
+    seen_v_mods = set()
     for idx, desc in enumerate(instruction_data.get('descriptors', [])):
         target = get_target_verb(desc)
         if target:
@@ -372,6 +375,12 @@ def create_graph_from_instruction(
                 desc_rel = "mod"
 
             safe_desc = str(desc_label).strip().replace(" ", "-")
+            
+            # Deduplication
+            if (target, desc_rel, safe_desc) in seen_v_mods:
+                continue
+            seen_v_mods.add((target, desc_rel, safe_desc))
+
             modifier_node = f"modifier_verb_{safe_desc}_{uuid.uuid4().hex[:6]}"
             G.add_node(modifier_node, node_type="modifier", label=safe_desc)
 
@@ -385,6 +394,7 @@ def create_graph_from_instruction(
                 G.add_node(rel_node_id, node_type="relation", label=desc_rel)
                 G.add_edge(target, rel_node_id)
                 G.add_edge(rel_node_id, modifier_node)
+
 
     # If we still don't have a root, nothing more to do
     if not root_node:
@@ -452,12 +462,20 @@ def create_graph_from_instruction(
     def add_modifier_nodes(G, noun_node, modifier, intensifier=None):
         if not modifier:
             return None
+        
+        safe_modifier = str(modifier).strip().replace(" ", "-")
+        
+        # Deduplication: Check if this parent node already has a modifier with same label
+        for neighbor in G.neighbors(noun_node):
+            if G.nodes[neighbor].get('node_type') == 'mod':
+                for grandchild in G.neighbors(neighbor):
+                    if G.nodes[grandchild].get('label') == safe_modifier:
+                        return neighbor # Return existing mod node
 
         mod_node = f"mod_{uuid.uuid4().hex[:6]}"
         G.add_node(mod_node, node_type="mod", label="mod")
         G.add_edge(noun_node, mod_node)
 
-        safe_modifier = str(modifier).strip().replace(" ", "-")
         modifier_node = f"modifier_{safe_modifier}_{uuid.uuid4().hex[:6]}"
         G.add_node(modifier_node, node_type="modifier", label=safe_modifier)
         G.add_edge(mod_node, modifier_node)
@@ -505,19 +523,27 @@ def create_graph_from_instruction(
             if not noun:
                 continue
 
-            noun_node = f"noun_{relation}_{noun}_{uuid.uuid4().hex[:6]}"
-            G.add_node(noun_node, node_type='noun', label=noun)
-            G.add_edge(relation_node, noun_node)
-
+            # Deduplication: Check if this noun with this relation already exists for this verb
+            noun_key = (target_verb, relation, noun)
+            if noun_key in added_nouns:
+                noun_node = added_nouns[noun_key]
+            else:
+                noun_node = f"noun_{relation}_{noun}_{uuid.uuid4().hex[:6]}"
+                G.add_node(noun_node, node_type='noun', label=noun)
+                G.add_edge(relation_node, noun_node)
+                added_nouns[noun_key] = noun_node
 
             number = str(noun_rel.get('number', ''))
-            number_node = f"number_{number}_{uuid.uuid4().hex[:6]}"
-            num_node = f"num__{uuid.uuid4().hex[:6]}"
             if number:
-                G.add_node(num_node, node_type='card', label="card")
-                G.add_node(number_node, node_type='number', label=number)
-                G.add_edge(noun_node, num_node)
-                G.add_edge(num_node, number_node)
+                # Check if number already exists
+                existing_nums = [G.nodes[gc].get('label') for n in G.neighbors(noun_node) if G.nodes[n].get('node_type') == 'card' for gc in G.neighbors(n)]
+                if number not in existing_nums:
+                    number_node = f"number_{number}_{uuid.uuid4().hex[:6]}"
+                    num_node = f"num__{uuid.uuid4().hex[:6]}"
+                    G.add_node(num_node, node_type='card', label="card")
+                    G.add_node(number_node, node_type='number', label=number)
+                    G.add_edge(noun_node, num_node)
+                    G.add_edge(num_node, number_node)
 
             quantity = str(noun_rel.get('quantity', ''))
             measurement = noun_rel.get('measurement', None)
@@ -535,18 +561,28 @@ def create_graph_from_instruction(
                 )
 
             # Handle modifiers and intensifiers
-            modifiers = noun_rel.get('nounModifiers', {}).get(noun, [])
-            intensifiers = noun_rel.get('nounIntensifiers', {}).get(noun, [])
+            # Unique processing to avoid duplicates from list
+            raw_modifiers = noun_rel.get('nounModifiers', {}).get(noun, [])
+            raw_intensifiers = noun_rel.get('nounIntensifiers', {}).get(noun, [])
             
-            # Zip modifiers with intensifiers
-            mod_int_pairs = itertools.zip_longest(modifiers, intensifiers)
-            for modifier, intensifier in mod_int_pairs:
-                if modifier:
-                    add_modifier_nodes(G, noun_node, modifier, intensifier)
+            # Use unique pairs
+            seen_mod_pairs = set()
+            processed_mods = []
+            processed_ints = []
+            
+            mod_int_pairs = list(itertools.zip_longest(raw_modifiers, raw_intensifiers))
+            for m, i in mod_int_pairs:
+                if m and (m, i) not in seen_mod_pairs:
+                    processed_mods.append(m)
+                    processed_ints.append(i)
+                    seen_mod_pairs.add((m, i))
+
+            for modifier, intensifier in zip(processed_mods, processed_ints):
+                add_modifier_nodes(G, noun_node, modifier, intensifier)
 
             # Support legacy 'modifier' field if present
             legacy_mod = noun_rel.get('modifier')
-            if legacy_mod and legacy_mod not in modifiers:
+            if legacy_mod and legacy_mod not in processed_mods:
                 add_modifier_nodes(G, noun_node, legacy_mod, noun_rel.get('intensifier'))
 
             # Handle span relationship if present
@@ -609,27 +645,38 @@ def create_graph_from_instruction(
                 G.add_node(opt_node, node_type='option', label=f"op{noun_idx}")
                 G.add_edge(connector_node, opt_node)
 
-                noun_node = f"noun_{relation}_{noun}_{noun_idx}_{uuid.uuid4().hex[:6]}"
-                G.add_node(noun_node, node_type='noun', label=noun)
+                # Deduplication
+                noun_key = (target_verb, relation, noun)
+                if noun_key in added_nouns:
+                    noun_node = added_nouns[noun_key]
+                else:
+                    noun_node = f"noun_{relation}_{noun}_{noun_idx}_{uuid.uuid4().hex[:6]}"
+                    G.add_node(noun_node, node_type='noun', label=noun)
+                    added_nouns[noun_key] = noun_node
+                
                 G.add_edge(opt_node, noun_node)
 
                 # Handle modifiers and intensifiers
-                modifiers = noun_rel.get('nounModifiers', {}).get(noun, [])
-                intensifiers = noun_rel.get('nounIntensifiers', {}).get(noun, [])
+                raw_modifiers = noun_rel.get('nounModifiers', {}).get(noun, [])
+                raw_intensifiers = noun_rel.get('nounIntensifiers', {}).get(noun, [])
+                
+                seen_mod_pairs = set()
+                processed_mods = []
+                processed_ints = []
+                
+                mod_int_pairs = list(itertools.zip_longest(raw_modifiers, raw_intensifiers))
+                for m, i in mod_int_pairs:
+                    # modifier can be a dict or string
+                    m_val = m.get('modifier') if isinstance(m, dict) else m
+                    i_val = m.get('intensifier') if isinstance(m, dict) else i
+                    
+                    if m_val and (m_val, i_val) not in seen_mod_pairs:
+                        processed_mods.append(m_val)
+                        processed_ints.append(i_val)
+                        seen_mod_pairs.add((m_val, i_val))
 
-                # Zip modifiers with intensifiers, padding shorter list with None
-                mod_int_pairs = itertools.zip_longest(modifiers, intensifiers)
-
-                for modifier, intensifier in mod_int_pairs:
-                    if isinstance(modifier, dict):
-                        add_modifier_nodes(
-                            G,
-                            noun_node,
-                            modifier.get('modifier'),
-                            modifier.get('intensifier')
-                        )
-                    elif modifier:
-                        add_modifier_nodes(G, noun_node, modifier, intensifier)
+                for m_val, i_val in zip(processed_mods, processed_ints):
+                    add_modifier_nodes(G, noun_node, m_val, i_val)
 
                 # Handle measurements
                 if noun_rel.get('measureTypes', {}).get(noun) == 'complex':
@@ -715,8 +762,12 @@ def create_graph_from_instruction(
 
     # ---------- Tools: verb -> relation -> tool ----------
     for t_idx, tool_data in enumerate(instruction_data.get("tools", [])):
-        tool_name = (tool_data.get("tool") or "").strip()
-        relation_label = (tool_data.get("relation") or "tool").strip()
+        if isinstance(tool_data, dict):
+            tool_name = (tool_data.get("tool") or "").strip()
+            relation_label = (tool_data.get("relation") or "tool").strip()
+        else:
+            tool_name = str(tool_data).strip()
+            relation_label = "tool"
 
         if not tool_name:
             continue
@@ -733,18 +784,29 @@ def create_graph_from_instruction(
         G.add_node(tool_node_id, node_type="tool", label=tool_name)
         G.add_edge(rel_node_id, tool_node_id)
 
+        # Handle tool modifiers
+        modifiers = tool_data.get('modifiers', [])
+        for modifier in modifiers:
+            add_modifier_nodes(G, tool_node_id, modifier)
+
     # ---------- Temporals LAST: verb -> dur -> "for 5 minutes" ----------
 
     temporals = instruction_data.get("temporals", [])
     for idx, temp in enumerate(temporals):
-        value = temp.get("value")
-        unit = (temp.get("unit") or "").strip()
-        display = (temp.get("display") or "").strip()
-        relation = (temp.get("relation") or "dur").strip()
-        
-        # semantics
-        semantic = temp.get("semanticCategory", "")
-        morpho = temp.get("morphoSemantic", "")
+        if isinstance(temp, dict):
+            value = temp.get("value")
+            unit = (temp.get("unit") or "").strip()
+            display = (temp.get("display") or "").strip()
+            relation = (temp.get("relation") or "dur").strip()
+            semantic = temp.get("semanticCategory", "")
+            morpho = temp.get("morphoSemantic", "")
+        else:
+            value = None
+            unit = ""
+            display = str(temp)
+            relation = "dur"
+            semantic = ""
+            morpho = ""
 
         # build label for temporal node
         if unit.lower() in ["minutes", "hours", "seconds"]:
